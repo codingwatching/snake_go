@@ -18,6 +18,7 @@ class SnakeGameClient {
 
         // UI elements
         this.scoreEl = document.getElementById('score');
+        this.bestScoreEl = document.getElementById('bestScore');
         this.speedEl = document.getElementById('speed');
         this.eatenEl = document.getElementById('eaten');
         this.boostIndicator = document.getElementById('boostIndicator');
@@ -27,9 +28,69 @@ class SnakeGameClient {
         this.overlayMessage = document.getElementById('overlayMessage');
         this.connectionStatus = document.getElementById('connectionStatus');
 
+        // High score persistence
+        this.bestScore = parseInt(localStorage.getItem('snake_best_score')) || 0;
+        this.bestScoreEl.textContent = this.bestScore;
+
         this.setupWebSocket();
         this.setupKeyboard();
-        this.render();
+        this.setupMobileControls();
+
+        // State for UI optimization
+        this.lastMessage = '';
+        this.messageTimeout = null;
+        this.lastGameOver = false;
+
+        // Start animation loop once
+        this.startAnimationLoop();
+    }
+
+    startAnimationLoop() {
+        const frame = () => {
+            this.render();
+            requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+    }
+
+    setupMobileControls() {
+        const buttons = {
+            'btn-up': 'up',
+            'btn-down': 'down',
+            'btn-left': 'left',
+            'btn-right': 'right',
+            'btn-pause': 'pause'
+        };
+
+        Object.entries(buttons).forEach(([id, action]) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+
+            // Handle both touch and click
+            const handleAction = (e) => {
+                e.preventDefault();
+                if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+                this.ws.send(JSON.stringify({ action }));
+            };
+
+            btn.addEventListener('touchstart', handleAction);
+            btn.addEventListener('mousedown', handleAction);
+        });
+
+        // Restart support via overlay tap/touch
+        const handleStartRestart = () => {
+            if (this.gameState && this.gameState.gameOver) {
+                this.ws.send(JSON.stringify({ action: 'restart' }));
+            } else if (this.gameState && !this.gameState.started) {
+                this.ws.send(JSON.stringify({ action: 'start' }));
+            }
+        };
+
+        this.gameOverlay.addEventListener('click', handleStartRestart);
+        this.gameOverlay.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleStartRestart();
+        });
     }
 
     setupWebSocket() {
@@ -44,9 +105,11 @@ class SnakeGameClient {
         };
 
         this.ws.onmessage = (event) => {
-            this.gameState = JSON.parse(event.data);
+            const newState = JSON.parse(event.data);
+            // Only update UI if state changed enough or periodically
+            this.gameState = newState;
             this.updateUI();
-            this.render();
+            // REMOVED: this.render() is now called by the animation loop
         };
 
         this.ws.onerror = (error) => {
@@ -87,34 +150,68 @@ class SnakeGameClient {
     updateUI() {
         if (!this.gameState) return;
 
-        // Update stats
-        this.scoreEl.textContent = this.gameState.score || 0;
+        // 1. Update Current Stats
+        const currentScore = this.gameState.score || 0;
+        this.scoreEl.textContent = currentScore;
         this.speedEl.textContent = (this.gameState.eatingSpeed || 0).toFixed(2);
         this.eatenEl.textContent = this.gameState.foodEaten || 0;
 
-        // Boost indicator
+        // 2. High Score Logic
+        if (currentScore > this.bestScore) {
+            this.bestScore = currentScore;
+            this.bestScoreEl.textContent = this.bestScore;
+            localStorage.setItem('snake_best_score', this.bestScore);
+            this.bestScoreEl.parentElement.classList.add('new-record');
+        } else {
+            this.bestScoreEl.parentElement.classList.remove('new-record');
+        }
+
+        // 3. Game Over Special Message
+        if (this.gameState.gameOver && !this.lastGameOver) {
+            if (currentScore >= this.bestScore && currentScore > 0) {
+                this.gameState.message = "🎊 AMAZING! NEW HIGH SCORE! 🎊";
+            }
+        }
+        this.lastGameOver = this.gameState.gameOver;
+
+        // 4. Boost indicator
         if (this.gameState.boosting) {
             this.boostIndicator.classList.add('active');
         } else {
             this.boostIndicator.classList.remove('active');
         }
 
-        // Message display
-        if (this.gameState.message) {
-            this.messageDisplay.textContent = this.gameState.message;
+        // 5. Message display optimization (same as before)
+        const currentMsg = this.gameState.message || '';
+        if (currentMsg && currentMsg !== this.lastMessage) {
+            this.lastMessage = currentMsg;
+            this.messageDisplay.textContent = currentMsg;
             this.messageDisplay.classList.add('show');
-            setTimeout(() => {
+
+            if (this.messageTimeout) {
+                clearTimeout(this.messageTimeout);
+            }
+
+            this.messageTimeout = setTimeout(() => {
                 this.messageDisplay.classList.remove('show');
+                this.lastMessage = '';
             }, 3000);
-        } else {
+        } else if (!currentMsg) {
             this.messageDisplay.textContent = '';
+            this.messageDisplay.classList.remove('show');
+            this.lastMessage = '';
         }
 
-        // Game overlay
-        if (this.gameState.gameOver) {
-            this.showOverlay('💀 GAME OVER!', 'Press R to restart');
+        // 6. Game overlay
+        if (!this.gameState.started) {
+            const msg = window.innerWidth <= 768 ? 'Tap to start' : 'Press SPACE to start';
+            this.showOverlay('🐍 READY?', msg);
+        } else if (this.gameState.gameOver) {
+            const msg = window.innerWidth <= 768 ? 'Tap to restart' : 'Press R to restart';
+            this.showOverlay('💀 GAME OVER!', msg);
         } else if (this.gameState.paused) {
-            this.showOverlay('⏸️ PAUSED', 'Press P to continue');
+            const msg = window.innerWidth <= 768 ? 'Tap to resume' : 'Press P to continue';
+            this.showOverlay('⏸️ PAUSED', msg);
         } else {
             this.hideOverlay();
         }
@@ -198,7 +295,6 @@ class SnakeGameClient {
             });
         }
 
-        // Draw crash point
         if (this.gameState.gameOver && this.gameState.crashPoint) {
             this.ctx.font = `${this.cellSize}px sans-serif`;
             this.ctx.textAlign = 'center';
@@ -208,8 +304,6 @@ class SnakeGameClient {
                 this.gameState.crashPoint.y * this.cellSize + this.cellSize / 2
             );
         }
-
-        requestAnimationFrame(() => this.render());
     }
 
     drawCell(x, y) {
@@ -222,12 +316,9 @@ class SnakeGameClient {
     }
 
     drawFood(food) {
-        const colors = {
-            0: '#9f7aea', // Purple
-            1: '#4299e1', // Blue
-            2: '#ed8936', // Orange
-            3: '#f56565'  // Red
-        };
+        this.ctx.save();
+        const centerX = food.pos.x * this.cellSize + this.cellSize / 2;
+        const centerY = food.pos.y * this.cellSize + this.cellSize / 2;
 
         const emojis = {
             0: '🟣',
@@ -236,26 +327,51 @@ class SnakeGameClient {
             3: '🔴'
         };
 
-        // Draw food as emoji
-        this.ctx.font = `${this.cellSize - 4}px sans-serif`;
+        // 1. Calculate Pulsating Effect
+        let scale = 1.0;
+        if (food.remainingSeconds > 0 && food.remainingSeconds <= 5) {
+            // Speed up pulse as time runs out (from 2Hz to 5Hz)
+            const frequency = 5 - (food.remainingSeconds - 1) * 0.5;
+            scale = 1 + 0.15 * Math.sin(Date.now() * 0.005 * frequency);
+        }
+
+        // 2. Draw Food Emoji
+        this.ctx.font = `${(this.cellSize - 4) * scale}px sans-serif`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(
             emojis[food.foodType] || '🟣',
-            food.pos.x * this.cellSize + this.cellSize / 2,
-            food.pos.y * this.cellSize + this.cellSize / 2
+            centerX,
+            centerY
         );
 
-        // Draw timer if food has remainingSeconds
+        // 3. Draw Premium Radial Progress Ring
         if (food.remainingSeconds > 0 && food.remainingSeconds <= 5) {
-            const timerEmojis = ['', '①', '②', '③', '④', '⑤'];
-            this.ctx.font = `${this.cellSize / 2}px sans-serif`;
-            this.ctx.fillText(
-                timerEmojis[food.remainingSeconds],
-                (food.pos.x + 1) * this.cellSize - 4,
-                food.pos.y * this.cellSize + this.cellSize / 2
-            );
+            const radius = this.cellSize / 2 - 1;
+            const startAngle = -Math.PI / 2; // Top
+            const progress = food.remainingSeconds / 5;
+            const endAngle = startAngle + (progress * Math.PI * 2);
+
+            // Draw Background Track (Subtle white)
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+
+            // Draw Progress Arc (Glowing white)
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            this.ctx.lineWidth = 2;
+            this.ctx.lineCap = 'round';
+
+            // Add subtle glow
+            this.ctx.shadowBlur = 6;
+            this.ctx.shadowColor = '#fff';
+            this.ctx.stroke();
         }
+        this.ctx.restore();
     }
 }
 

@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🐍 Snake Game - Web Version</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div class="container">
         <!-- Header -->
@@ -16,6 +18,10 @@
 
         <!-- Stats Panel -->
         <div class="stats-panel">
+            <div class="stat-item highlight">
+                <span class="stat-label">Best Score</span>
+                <span class="stat-value" id="bestScore">0</span>
+            </div>
             <div class="stat-item">
                 <span class="stat-label">Score</span>
                 <span class="stat-value" id="score">0</span>
@@ -44,6 +50,20 @@
             <div class="game-overlay" id="gameOverlay">
                 <h2 id="overlayTitle">Ready to Play?</h2>
                 <p id="overlayMessage">Press SPACE to start</p>
+            </div>
+            <!-- Mobile Controls -->
+            <div class="mobile-controls">
+                <div class="control-row">
+                    <button class="mobile-btn" id="btn-up">▲</button>
+                </div>
+                <div class="control-row">
+                    <button class="mobile-btn" id="btn-left">◀</button>
+                    <button class="mobile-btn secondary" id="btn-pause">⏸</button>
+                    <button class="mobile-btn" id="btn-right">▶</button>
+                </div>
+                <div class="control-row">
+                    <button class="mobile-btn" id="btn-down">▼</button>
+                </div>
             </div>
         </div>
 
@@ -107,4 +127,5 @@
 
     <script src="game.js"></script>
 </body>
+
 </html>

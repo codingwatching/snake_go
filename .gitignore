@@ -4,7 +4,7 @@ snake_game
 snake_game.exe
 snake_game_*
 snake_new
-webserver
+/webserver
 *.exe
 *.exe~
 *.dll
