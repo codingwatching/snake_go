@@ -76,15 +76,17 @@ func (f *Food) GetDuration() time.Duration {
 	}
 }
 
-// IsExpired checks if the food has expired, accounting for paused time
-func (f *Food) IsExpired(pausedTime time.Duration) bool {
-	elapsed := time.Since(f.SpawnTime) - pausedTime
+// IsExpired checks if the food has expired, accounting for paused time that occurred AFTER spawn
+func (f *Food) IsExpired(currentTotalPaused time.Duration) bool {
+	pausedSinceSpawn := currentTotalPaused - f.PausedTimeAtSpawn
+	elapsed := time.Since(f.SpawnTime) - pausedSinceSpawn
 	return elapsed > f.GetDuration()
 }
 
-// GetRemainingSeconds returns remaining seconds before expiration, accounting for paused time
-func (f *Food) GetRemainingSeconds(pausedTime time.Duration) int {
-	elapsed := time.Since(f.SpawnTime) - pausedTime
+// GetRemainingSeconds returns remaining seconds before expiration, accounting for paused time AFTER spawn
+func (f *Food) GetRemainingSeconds(currentTotalPaused time.Duration) int {
+	pausedSinceSpawn := currentTotalPaused - f.PausedTimeAtSpawn
+	elapsed := time.Since(f.SpawnTime) - pausedSinceSpawn
 	remaining := f.GetDuration() - elapsed
 	if remaining < 0 {
 		return 0

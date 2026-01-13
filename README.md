@@ -14,10 +14,14 @@ A terminal-based Snake game written in Go, featuring emoji rendering and cross-p
 - ⏸️ Pause/resume functionality
 - 💥 Crash explosion effects
 - 🔄 Quick restart after game over
-- 🚀 Boost mode (hold direction key)
+- 🤖 **AI Auto-Play (Demo Mode)** with space-awareness (Flood Fill)
+- 🔊 **Dynamic Sound Effects** (Web Audio synthesized)
+- 📳 **Haptic Feedback** for mobile devices
+- 🚀 **Boost Mode** (Hold direction key)
 - 🍎 Multiple food types with different scores and expiry times
 - 📊 Real-time statistics (score, eating speed, food count)
 - 📦 Single binary, no runtime dependencies
+- 🌐 **Web & Terminal Support**
 
 ## 🎯 Game Features
 
@@ -114,7 +118,8 @@ snake_go/
 │   ├── game/                 # Core game logic
 │   │   ├── types.go         # Game data structures
 │   │   ├── game.go          # Game state management
-│   │   └── food.go          # Food-related logic
+│   │   ├── food.go          # Food-related logic
+│   │   └── ai.go            # AI & Auto-play logic (New)
 │   ├── renderer/             # Rendering layer
 │   │   └── terminal.go      # Terminal-based renderer
 │   ├── input/                # Input handling

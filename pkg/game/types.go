@@ -20,9 +20,10 @@ const (
 
 // Food represents a food item on the board
 type Food struct {
-	Pos       Point
-	FoodType  FoodType
-	SpawnTime time.Time
+	Pos               Point
+	FoodType          FoodType
+	SpawnTime         time.Time
+	PausedTimeAtSpawn time.Duration // Total game pause time when this food was spawned
 }
 
 // Game represents the main game state
@@ -30,11 +31,15 @@ type Game struct {
 	Snake         []Point
 	Foods         []Food // Multiple food items
 	Direction     Point
+	LastMoveDir   Point // Direction of the last performed move
 	Score         int
 	GameOver      bool
 	Paused        bool          // Pause state
+	AutoPlay      bool          // Auto-play / Demo mode active
+	Boosting      bool          // Active boosting state
 	CrashPoint    Point         // Collision position
 	StartTime     time.Time     // Game start time
+	EndTime       time.Time     // Game end time
 	FoodEaten     int           // Number of foods eaten
 	PausedTime    time.Duration // Accumulated pause time
 	PauseStart    time.Time     // Pause start time

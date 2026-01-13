@@ -18,11 +18,15 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// Global map to track active IP connections
+var activeIPs sync.Map
+
 type GameServer struct {
-	game     *game.Game
-	started  bool
-	boosting bool
-	ticker   *time.Ticker
+	game       *game.Game
+	started    bool
+	boosting   bool
+	difficulty string
+	ticker     *time.Ticker
 
 	// Boost tracking
 	tickCount           int
@@ -46,6 +50,8 @@ type GameState struct {
 	GameOver    bool         `json:"gameOver"`
 	Paused      bool         `json:"paused"`
 	Boosting    bool         `json:"boosting"`
+	AutoPlay    bool         `json:"autoPlay"`
+	Difficulty  string       `json:"difficulty"`
 	Message     string       `json:"message,omitempty"`
 	CrashPoint  *game.Point  `json:"crashPoint,omitempty"`
 }
@@ -58,8 +64,9 @@ type FoodInfo struct {
 
 func NewGameServer() *GameServer {
 	return &GameServer{
-		game:   game.NewGame(),
-		ticker: time.NewTicker(config.BaseTick),
+		game:       game.NewGame(),
+		ticker:     time.NewTicker(config.BaseTick),
+		difficulty: "mid",
 	}
 }
 
@@ -82,7 +89,9 @@ func (gs *GameServer) getGameState() GameState {
 		Started:     gs.started,
 		GameOver:    gs.game.GameOver,
 		Paused:      gs.game.Paused,
-		Boosting:    gs.boosting,
+		Boosting:    gs.game.Boosting || gs.boosting,
+		AutoPlay:    gs.game.AutoPlay,
+		Difficulty:  gs.difficulty,
 		Message:     gs.game.GetMessage(),
 	}
 
@@ -119,6 +128,7 @@ func (gs *GameServer) handleAction(action string) {
 				gs.game.LastFoodSpawn = time.Now()
 				if len(gs.game.Foods) > 0 {
 					gs.game.Foods[0].SpawnTime = time.Now()
+					gs.game.Foods[0].PausedTimeAtSpawn = gs.game.GetTotalPausedTime()
 				}
 			} else {
 				gs.game.TogglePause()
@@ -133,6 +143,22 @@ func (gs *GameServer) handleAction(action string) {
 			gs.boosting = false
 			gs.tickCount = 0
 			gs.consecutiveKeyCount = 0
+		}
+	case "diff_low":
+		if !gs.started || gs.game.GameOver {
+			gs.difficulty = "low"
+		}
+	case "diff_mid":
+		if !gs.started || gs.game.GameOver {
+			gs.difficulty = "mid"
+		}
+	case "diff_high":
+		if !gs.started || gs.game.GameOver {
+			gs.difficulty = "high"
+		}
+	case "auto":
+		if !gs.game.GameOver {
+			gs.game.ToggleAutoPlay()
 		}
 	}
 
@@ -180,9 +206,13 @@ func (gs *GameServer) checkBoostKey(inputDir game.Point) {
 }
 
 func (gs *GameServer) update() {
-	// Check boost timeout
-	if gs.boosting && time.Since(gs.lastBoostKeyTime) > config.BoostTimeout {
-		gs.boosting = false
+	// Sync manual boosting state to game if not in AutoPlay
+	if !gs.game.AutoPlay {
+		// Check manual boost timeout
+		if gs.boosting && time.Since(gs.lastBoostKeyTime) > config.BoostTimeout {
+			gs.boosting = false
+		}
+		gs.game.Boosting = gs.boosting
 	}
 
 	gs.tickCount++
@@ -191,9 +221,23 @@ func (gs *GameServer) update() {
 		return
 	}
 
-	ticksNeeded := config.NormalTicksPerUpdate
-	if gs.boosting {
-		ticksNeeded = config.BoostTicksPerUpdate
+	ticksNeeded := 13 // Default Medium
+	boostTicks := 4
+
+	switch gs.difficulty {
+	case "low":
+		ticksNeeded = 18 // 288ms
+		boostTicks = 6   // 96ms
+	case "mid":
+		ticksNeeded = 13 // 208ms (approx 216ms)
+		boostTicks = 4   // 64ms
+	case "high":
+		ticksNeeded = 9 // 144ms
+		boostTicks = 3  // 48ms
+	}
+
+	if gs.game.Boosting {
+		ticksNeeded = boostTicks
 	}
 
 	if gs.tickCount >= ticksNeeded {
@@ -212,7 +256,27 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	log.Println("New WebSocket connection")
+	log.Println("New WebSocket connection from:", r.RemoteAddr)
+
+	// Get base IP address (remove port)
+	ip := r.RemoteAddr
+	for i := len(r.RemoteAddr) - 1; i >= 0; i-- {
+		if r.RemoteAddr[i] == ':' {
+			ip = r.RemoteAddr[:i]
+			break
+		}
+	}
+
+	// Double check if this IP is already connected
+	if _, loaded := activeIPs.LoadOrStore(ip, true); loaded {
+		log.Printf("Connection rejected: IP %s is already connected\n", ip)
+		// Optionally send a reason before closing, but simple close is safer
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "Already connected"))
+		return
+	}
+
+	// Defer removal of IP from active list when connection closes
+	defer activeIPs.Delete(ip)
 
 	gs := NewGameServer()
 	defer gs.ticker.Stop()

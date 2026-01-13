@@ -12,6 +12,7 @@ func NewGame() *Game {
 	g := &Game{
 		Snake:         []Point{{X: config.Width / 2, Y: config.Height / 2}},
 		Direction:     Point{X: 1, Y: 0},
+		LastMoveDir:   Point{X: 1, Y: 0},
 		Score:         0,
 		GameOver:      false,
 		StartTime:     time.Now(),
@@ -76,9 +77,10 @@ func (g *Game) spawnOneFood() {
 
 		// Found valid position, spawn food
 		g.Foods = append(g.Foods, Food{
-			Pos:       pos,
-			FoodType:  foodType,
-			SpawnTime: time.Now(),
+			Pos:               pos,
+			FoodType:          foodType,
+			SpawnTime:         time.Now(),
+			PausedTimeAtSpawn: g.GetTotalPausedTime(),
 		})
 		g.LastFoodSpawn = time.Now()
 		return
@@ -124,6 +126,14 @@ func (g *Game) Update() {
 		return
 	}
 
+	// Auto-play logic
+	if g.AutoPlay {
+		g.UpdateAI()
+	}
+
+	// Update last move direction
+	g.LastMoveDir = g.Direction
+
 	// Calculate new head position
 	head := g.Snake[0]
 	newHead := Point{
@@ -134,6 +144,7 @@ func (g *Game) Update() {
 	// Check wall collision
 	if newHead.X <= 0 || newHead.X >= config.Width-1 || newHead.Y <= 0 || newHead.Y >= config.Height-1 {
 		g.GameOver = true
+		g.EndTime = time.Now()
 		g.CrashPoint = newHead
 		return
 	}
@@ -142,6 +153,7 @@ func (g *Game) Update() {
 	for _, p := range g.Snake {
 		if p == newHead {
 			g.GameOver = true
+			g.EndTime = time.Now()
 			g.CrashPoint = newHead
 			return
 		}
@@ -197,13 +209,67 @@ func (g *Game) TogglePause() {
 	g.Paused = !g.Paused
 }
 
+// ToggleAutoPlay toggles the AI auto-play mode
+func (g *Game) ToggleAutoPlay() {
+	g.AutoPlay = !g.AutoPlay
+	if g.AutoPlay {
+		g.SetMessage("🤖 自动模式已开启", 2*time.Second)
+	} else {
+		g.SetMessage("👤 手动模式已恢复", 2*time.Second)
+		g.Boosting = false // Reset boosting when leaving auto
+	}
+}
+
+// GetMoveInterval returns the current expected time between moves
+func (g *Game) GetMoveInterval(difficulty string) time.Duration {
+	return g.GetMoveIntervalExt(difficulty, g.Boosting)
+}
+
+// GetMoveIntervalExt returns the expected time between moves for a specific boost state
+func (g *Game) GetMoveIntervalExt(difficulty string, boosted bool) time.Duration {
+	ticks := 13 // Default Medium
+	boostTicks := 4
+
+	switch difficulty {
+	case "low":
+		ticks = 18
+		boostTicks = 6
+	case "mid":
+		ticks = 13
+		boostTicks = 4
+	case "high":
+		ticks = 9
+		boostTicks = 3
+	}
+
+	if boosted {
+		ticks = boostTicks
+	}
+
+	return time.Duration(ticks) * config.BaseTick
+}
+
+// ToggleBoost allows manual control of the boosting state (used by AI)
+func (g *Game) ToggleBoost(active bool) {
+	g.Boosting = active
+}
+
 // SetDirection sets the snake direction (with validation)
 func (g *Game) SetDirection(newDir Point) bool {
-	// Prevent reversing into self
+	// Prevent reversing into self relative to current direction
 	if newDir.X != 0 && g.Direction.X == -newDir.X {
 		return false
 	}
 	if newDir.Y != 0 && g.Direction.Y == -newDir.Y {
+		return false
+	}
+
+	// Prevent reversing into self relative to last moved direction
+	// This handles the "rapid key press" bug
+	if newDir.X != 0 && g.LastMoveDir.X == -newDir.X {
+		return false
+	}
+	if newDir.Y != 0 && g.LastMoveDir.Y == -newDir.Y {
 		return false
 	}
 
@@ -218,7 +284,11 @@ func (g *Game) SetDirection(newDir Point) bool {
 
 // GetEatingSpeed calculates foods eaten per second
 func (g *Game) GetEatingSpeed() float64 {
-	elapsed := time.Since(g.StartTime) - g.GetTotalPausedTime()
+	endTime := time.Now()
+	if g.GameOver {
+		endTime = g.EndTime
+	}
+	elapsed := endTime.Sub(g.StartTime) - g.GetTotalPausedTime()
 	if elapsed.Seconds() > 0 {
 		return float64(g.FoodEaten) / elapsed.Seconds()
 	}
@@ -230,7 +300,11 @@ func (g *Game) GetTotalPausedTime() time.Duration {
 	totalPaused := g.PausedTime
 	// If currently paused, add the current pause duration
 	if g.Paused {
-		totalPaused += time.Since(g.PauseStart)
+		endTime := time.Now()
+		if g.GameOver {
+			endTime = g.EndTime
+		}
+		totalPaused += endTime.Sub(g.PauseStart)
 	}
 	return totalPaused
 }

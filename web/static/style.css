@@ -77,27 +77,33 @@ body {
 }
 
 .stat-value {
-    display: block;
+    display: inline-block;
     font-size: 2rem;
     font-weight: 700;
     line-height: 1;
 }
 
 .stat-unit {
-    font-size: 0.9rem;
-    opacity: 0.7;
-    margin-left: 4px;
+    font-size: 1rem;
+    opacity: 0.8;
+    margin-left: 2px;
+    font-weight: 500;
 }
 
 /* Boost Indicator */
 .boost-indicator {
-    display: none;
+    opacity: 0;
+    visibility: hidden;
     background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    animation: pulse 0.6s ease-in-out infinite;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: scale(0.95);
 }
 
 .boost-indicator.active {
-    display: block;
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1);
+    animation: pulse 0.6s ease-in-out infinite;
 }
 
 .boost-icon {
@@ -163,6 +169,119 @@ body {
 
 .message-display.show {
     animation: bounceIn 0.5s ease-out;
+}
+
+/* Difficulty Selector */
+.difficulty-panel {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 10px 20px;
+    border-radius: 40px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-label {
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.8;
+}
+
+.difficulty-options {
+    display: flex;
+    gap: 8px;
+}
+
+.diff-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.diff-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.diff-btn.active {
+    background: #fff;
+    color: #1a1a2e;
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+}
+
+#diff-low.active {
+    background: #48bb78;
+    color: #fff;
+    border-color: #48bb78;
+}
+
+#diff-mid.active {
+    background: #ed8936;
+    color: #fff;
+    border-color: #ed8936;
+}
+
+#diff-high.active {
+    background: #f56565;
+    color: #fff;
+    border-color: #f56565;
+}
+
+.auto-toggle {
+    margin-left: 10px;
+    padding-left: 15px;
+    border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.auto-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.auto-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+.auto-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #fff;
+    box-shadow: 0 4px 15px rgba(118, 75, 162, 0.4);
+    animation: autoGlow 2s infinite;
+}
+
+@keyframes autoGlow {
+    0% {
+        box-shadow: 0 4px 15px rgba(118, 75, 162, 0.4);
+    }
+
+    50% {
+        box-shadow: 0 4px 25px rgba(118, 75, 162, 0.7);
+    }
+
+    100% {
+        box-shadow: 0 4px 15px rgba(118, 75, 162, 0.4);
+    }
 }
 
 /* Game Container */
@@ -494,6 +613,35 @@ kbd {
     }
 
     .stat-value {
+        font-size: 1.3rem;
+        display: inline-block;
+    }
+
+    .stat-unit {
+        font-size: 0.8rem;
+        display: inline-block;
+    }
+
+    /* Boost Indicator Mobile Fixed Position */
+    .boost-indicator {
+        grid-column: span 2;
+        /* Occupy full width to reserve row */
+        padding: 10px;
+        min-height: 50px;
+        /* Force consistent height */
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .boost-indicator .stat-label {
+        margin-bottom: 0;
+        margin-right: 10px;
+    }
+
+    .boost-icon {
         font-size: 1.5rem;
     }
 
@@ -520,5 +668,37 @@ kbd {
         right: 10px;
         font-size: 0.8rem;
         padding: 5px 12px;
+    }
+
+    /* Optimized Difficulty & Auto Panel for Mobile */
+    .difficulty-panel {
+        padding: 6px 10px;
+        gap: 6px;
+        border-radius: 12px;
+        margin-bottom: 15px;
+    }
+
+    .panel-label {
+        display: none;
+    }
+
+    .difficulty-options {
+        gap: 4px;
+    }
+
+    .diff-btn {
+        padding: 5px 8px;
+        font-size: 0.75rem;
+    }
+
+    .auto-toggle {
+        margin-left: 0;
+        padding-left: 6px;
+        border-left: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .auto-btn {
+        padding: 5px 8px;
+        font-size: 0.75rem;
     }
 }

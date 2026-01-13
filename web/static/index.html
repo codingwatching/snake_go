@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🐍 Snake Game - Web Version</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=1.1">
 </head>
 
 <body>
@@ -41,8 +41,18 @@
             </div>
         </div>
 
-        <!-- Message Display -->
-        <div class="message-display" id="messageDisplay"></div>
+        <!-- Difficulty Selector -->
+        <div class="difficulty-panel">
+            <span class="panel-label">Difficulty:</span>
+            <div class="difficulty-options">
+                <button class="diff-btn" data-diff="low" id="diff-low">Low</button>
+                <button class="diff-btn active" data-diff="mid" id="diff-mid">Medium</button>
+                <button class="diff-btn" data-diff="high" id="diff-high">High</button>
+            </div>
+            <div class="auto-toggle">
+                <button class="auto-btn" id="btn-auto">🤖 Auto-Play</button>
+            </div>
+        </div>
 
         <!-- Game Canvas -->
         <div class="game-container">
@@ -84,6 +94,10 @@
                 <div class="control-item">
                     <kbd>R</kbd>
                     <span>Restart</span>
+                </div>
+                <div class="control-item">
+                    <kbd>A</kbd>
+                    <span>Auto-Play</span>
                 </div>
                 <div class="control-item">
                     <span class="tip">💡 Hold direction key for 🚀 BOOST!</span>

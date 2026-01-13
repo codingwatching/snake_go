@@ -1,12 +1,73 @@
 // Snake Game - Web Version
 // WebSocket connection and rendering
 
+class SoundManager {
+    constructor() {
+        this.ctx = null;
+        this.enabled = true;
+    }
+
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    playTone(freq, type, duration, volume = 0.1) {
+        if (!this.enabled || !this.ctx) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+        gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    playMove() {
+        this.playTone(150, 'sine', 0.1, 0.05);
+    }
+
+    playEat(type) {
+        // Different pitches for different foods
+        const freqs = { 0: 440, 1: 554, 2: 659, 3: 880 };
+        const f = freqs[type] || 440;
+        this.playTone(f, 'triangle', 0.3, 0.15);
+        setTimeout(() => this.playTone(f * 1.5, 'triangle', 0.2, 0.1), 50);
+    }
+
+    playCrash() {
+        this.playTone(100, 'sawtooth', 0.5, 0.2);
+        this.playTone(50, 'square', 0.8, 0.1);
+    }
+
+    playBoost(active) {
+        if (active) {
+            this.playTone(200, 'sine', 0.1, 0.03);
+        }
+    }
+
+    toggle() {
+        this.enabled = !this.enabled;
+        return this.enabled;
+    }
+}
+
 class SnakeGameClient {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.ws = null;
         this.gameState = null;
+        this.sounds = new SoundManager();
 
         // Canvas settings
         this.cellSize = 20;
@@ -16,33 +77,67 @@ class SnakeGameClient {
         this.canvas.width = this.boardWidth * this.cellSize;
         this.canvas.height = this.boardHeight * this.cellSize;
 
+        // Sound init on first interaction (browser requirement)
+        const initAudio = () => {
+            this.sounds.init();
+            document.removeEventListener('click', initAudio);
+            document.removeEventListener('keydown', initAudio);
+        };
+        document.addEventListener('click', initAudio);
+        document.addEventListener('keydown', initAudio);
+
         // UI elements
         this.scoreEl = document.getElementById('score');
         this.bestScoreEl = document.getElementById('bestScore');
         this.speedEl = document.getElementById('speed');
         this.eatenEl = document.getElementById('eaten');
         this.boostIndicator = document.getElementById('boostIndicator');
-        this.messageDisplay = document.getElementById('messageDisplay');
         this.gameOverlay = document.getElementById('gameOverlay');
         this.overlayTitle = document.getElementById('overlayTitle');
         this.overlayMessage = document.getElementById('overlayMessage');
         this.connectionStatus = document.getElementById('connectionStatus');
 
-        // High score persistence
-        this.bestScore = parseInt(localStorage.getItem('snake_best_score')) || 0;
+        // High score persistence with safety check
+        this.bestScore = 0;
+        try {
+            const savedScore = localStorage.getItem('snake_best_score');
+            if (savedScore) {
+                this.bestScore = parseInt(savedScore) || 0;
+            }
+        } catch (e) {
+            console.warn('LocalStorage access denied:', e);
+        }
         this.bestScoreEl.textContent = this.bestScore;
 
         this.setupWebSocket();
         this.setupKeyboard();
         this.setupMobileControls();
+        this.setupDifficulty();
+        this.setupAutoPlay();
 
-        // State for UI optimization
+        // Message state for Canvas
+        this.currentMessage = '';
+        this.messageAlpha = 0;
+        this.messageStartTime = 0;
         this.lastMessage = '';
         this.messageTimeout = null;
         this.lastGameOver = false;
+        this.previousScore = 0;
+        this.previousEaten = 0;
 
         // Start animation loop once
         this.startAnimationLoop();
+    }
+
+    // Helper for haptic feedback
+    triggerHaptic(pattern = 10) {
+        if ('vibrate' in navigator) {
+            try {
+                navigator.vibrate(pattern);
+            } catch (e) {
+                // Ignore vibration errors as they are non-critical
+            }
+        }
     }
 
     startAnimationLoop() {
@@ -62,27 +157,59 @@ class SnakeGameClient {
             'btn-pause': 'pause'
         };
 
+        this.pressTimer = null;
+
         Object.entries(buttons).forEach(([id, action]) => {
             const btn = document.getElementById(id);
             if (!btn) return;
 
-            // Handle both touch and click
-            const handleAction = (e) => {
+            const startAction = (e) => {
                 e.preventDefault();
                 if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+                // Initial move
                 this.ws.send(JSON.stringify({ action }));
+                this.triggerHaptic(15);
+                this.sounds.playMove();
+
+                // Setup repeat for Boost
+                if (action !== 'pause') {
+                    if (this.pressTimer) clearInterval(this.pressTimer);
+                    this.pressTimer = setInterval(() => {
+                        this.ws.send(JSON.stringify({ action }));
+                        // Subtle haptic for boosting
+                        if (this.gameState && this.gameState.boosting) {
+                            this.triggerHaptic(5);
+                        }
+                    }, 80); // Send every 80ms while holding
+                }
             };
 
-            btn.addEventListener('touchstart', handleAction);
-            btn.addEventListener('mousedown', handleAction);
+            const endAction = (e) => {
+                e.preventDefault();
+                if (this.pressTimer) {
+                    clearInterval(this.pressTimer);
+                    this.pressTimer = null;
+                }
+            };
+
+            btn.addEventListener('touchstart', startAction);
+            btn.addEventListener('touchend', endAction);
+            btn.addEventListener('touchcancel', endAction);
+
+            btn.addEventListener('mousedown', startAction);
+            btn.addEventListener('mouseup', endAction);
+            btn.addEventListener('mouseleave', endAction);
         });
 
         // Restart support via overlay tap/touch
         const handleStartRestart = () => {
             if (this.gameState && this.gameState.gameOver) {
                 this.ws.send(JSON.stringify({ action: 'restart' }));
+                this.triggerHaptic([30, 50, 30]); // Distinct pattern for restart
             } else if (this.gameState && !this.gameState.started) {
                 this.ws.send(JSON.stringify({ action: 'start' }));
+                this.triggerHaptic(20);
             }
         };
 
@@ -134,17 +261,77 @@ class SnakeGameClient {
             // Direction keys
             if (key === 'arrowup' || key === 'w') action = 'up';
             else if (key === 'arrowdown' || key === 's') action = 'down';
-            else if (key === 'arrowleft' || key === 'a') action = 'left';
+            else if (key === 'arrowleft') action = 'left'; // Removed 'a' to allow auto-play toggle
             else if (key === 'arrowright' || key === 'd') action = 'right';
             else if (key === ' ' || key === 'p') action = 'pause';
             else if (key === 'r') action = 'restart';
             else if (key === 'q') action = 'quit';
+            else if (key === 'a') action = 'auto'; // 'a' is for auto-play
 
             if (action) {
                 e.preventDefault();
                 this.ws.send(JSON.stringify({ action }));
+
+                // Play sounds/haptics for actions
+                if (['up', 'down', 'left', 'right'].includes(action)) {
+                    this.sounds.playMove();
+                    this.triggerHaptic(15);
+                } else if (action === 'auto') {
+                    this.sounds.playEat(0); // Slight feedback for toggle
+                    this.triggerHaptic(25);
+                }
             }
         });
+    }
+
+    setupDifficulty() {
+        ['low', 'mid', 'high'].forEach(d => {
+            const btn = document.getElementById(`diff-${d}`);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    if (this.ws && (this.gameState && (!this.gameState.started || this.gameState.gameOver))) {
+                        this.ws.send(JSON.stringify({ action: `diff_${d}` }));
+                        this.triggerHaptic(20);
+                    } else if (this.gameState && this.gameState.started && !this.gameState.gameOver) {
+                        this.showTempMessage("Can't change difficulty during game!");
+                        this.triggerHaptic([50, 100, 50]); // Error vibration
+                    }
+                });
+            }
+        });
+    }
+
+    setupAutoPlay() {
+        const btn = document.getElementById('btn-auto');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                if (this.ws && (this.ws.readyState === WebSocket.OPEN)) {
+                    this.ws.send(JSON.stringify({ action: 'auto' }));
+                    this.triggerHaptic(25);
+                }
+            });
+        }
+    }
+
+    showTempMessage(msg) {
+        if (!msg) return;
+        this.currentMessage = msg;
+        this.messageAlpha = 1.0;
+        this.messageStartTime = Date.now();
+
+        // Note: We no longer clear this.lastMessage here.
+        // this.lastMessage acts as a buffer for what we've already reacted to.
+
+        if (this.messageTimeout) {
+            clearTimeout(this.messageTimeout);
+        }
+
+        // Logic for canvas rendering duration (1.5s total with fade)
+        this.messageTimeout = setTimeout(() => {
+            this.currentMessage = '';
+            // We DON'T clear this.lastMessage here to prevent re-triggering 
+            // the same message still being broadcast by the server.
+        }, 1500);
     }
 
     updateUI() {
@@ -152,6 +339,19 @@ class SnakeGameClient {
 
         // 1. Update Current Stats
         const currentScore = this.gameState.score || 0;
+        const currentEaten = this.gameState.foodEaten || 0;
+
+        // Haptic on eating food
+        if (currentEaten > this.previousEaten) {
+            this.triggerHaptic(20);
+            // Play eat sound for the last food eaten
+            const lastFoodType = this.gameState.foods && this.gameState.foods.length > 0 ?
+                this.gameState.foods[0].foodType : 0;
+            this.sounds.playEat(lastFoodType);
+        }
+        this.previousEaten = currentEaten;
+        this.previousScore = currentScore;
+
         this.scoreEl.textContent = currentScore;
         this.speedEl.textContent = (this.gameState.eatingSpeed || 0).toFixed(2);
         this.eatenEl.textContent = this.gameState.foodEaten || 0;
@@ -160,7 +360,11 @@ class SnakeGameClient {
         if (currentScore > this.bestScore) {
             this.bestScore = currentScore;
             this.bestScoreEl.textContent = this.bestScore;
-            localStorage.setItem('snake_best_score', this.bestScore);
+            try {
+                localStorage.setItem('snake_best_score', this.bestScore);
+            } catch (e) {
+                console.error('Failed to save high score:', e);
+            }
             this.bestScoreEl.parentElement.classList.add('new-record');
         } else {
             this.bestScoreEl.parentElement.classList.remove('new-record');
@@ -168,8 +372,10 @@ class SnakeGameClient {
 
         // 3. Game Over Special Message
         if (this.gameState.gameOver && !this.lastGameOver) {
+            this.triggerHaptic([100, 50, 100]); // Heavy vibration on crash
+            this.sounds.playCrash();
             if (currentScore >= this.bestScore && currentScore > 0) {
-                this.gameState.message = "🎊 AMAZING! NEW HIGH SCORE! 🎊";
+                this.showTempMessage("🎊 NEW HIGH SCORE! 🎊");
             }
         }
         this.lastGameOver = this.gameState.gameOver;
@@ -177,28 +383,42 @@ class SnakeGameClient {
         // 4. Boost indicator
         if (this.gameState.boosting) {
             this.boostIndicator.classList.add('active');
+            this.sounds.playBoost(true);
         } else {
             this.boostIndicator.classList.remove('active');
         }
 
-        // 5. Message display optimization (same as before)
+        // 4.5 Update difficulty labels
+        const diffs = ['low', 'mid', 'high'];
+        diffs.forEach(d => {
+            const btn = document.getElementById(`diff-${d}`);
+            if (btn) {
+                if (this.gameState.difficulty === d) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            }
+        });
+
+        // 4.6 Update auto-play button
+        const autoBtn = document.getElementById('btn-auto');
+        if (autoBtn) {
+            if (this.gameState.autoPlay) {
+                autoBtn.classList.add('active');
+                autoBtn.innerHTML = '🤖 Auto: ON';
+            } else {
+                autoBtn.classList.remove('active');
+                autoBtn.innerHTML = '👤 Auto: OFF';
+            }
+        }
+
+        // 5. Intercept server messages for Canvas display
         const currentMsg = this.gameState.message || '';
         if (currentMsg && currentMsg !== this.lastMessage) {
-            this.lastMessage = currentMsg;
-            this.messageDisplay.textContent = currentMsg;
-            this.messageDisplay.classList.add('show');
-
-            if (this.messageTimeout) {
-                clearTimeout(this.messageTimeout);
-            }
-
-            this.messageTimeout = setTimeout(() => {
-                this.messageDisplay.classList.remove('show');
-                this.lastMessage = '';
-            }, 3000);
+            this.lastMessage = currentMsg; // Update seen message
+            this.showTempMessage(currentMsg);
         } else if (!currentMsg) {
-            this.messageDisplay.textContent = '';
-            this.messageDisplay.classList.remove('show');
             this.lastMessage = '';
         }
 
@@ -304,6 +524,67 @@ class SnakeGameClient {
                 this.gameState.crashPoint.y * this.cellSize + this.cellSize / 2
             );
         }
+
+        // --- Render Canvas Message ---
+        this.drawCanvasMessage();
+    }
+
+    drawCanvasMessage() {
+        if (!this.currentMessage) return;
+
+        const now = Date.now();
+        const age = now - this.messageStartTime;
+
+        // Settings: Show for 1.5s total (1s static + 0.5s fade/float)
+        if (age > 1500) return;
+
+        let displayAlpha = 1.0;
+        let yOffset = 0;
+
+        if (age > 1000) {
+            // Fade and Float in last 500ms
+            const fadeProgress = (age - 1000) / 500;
+            displayAlpha = 1.0 - fadeProgress;
+            yOffset = -fadeProgress * 30; // Float up by 30px
+        }
+
+        const x = this.canvas.width / 2;
+        const y = this.canvas.height / 3 + yOffset; // Position in upper third
+
+        this.ctx.save();
+        this.ctx.globalAlpha = displayAlpha;
+
+        // Draw pill background
+        this.ctx.font = 'bold 20px Inter, sans-serif';
+        const padding = 20;
+        const metrics = this.ctx.measureText(this.currentMessage);
+        const rectWidth = metrics.width + padding * 2;
+        const rectHeight = 44;
+
+        // Fill
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.beginPath();
+        if (this.ctx.roundRect) {
+            this.ctx.roundRect(x - rectWidth / 2, y - rectHeight / 2, rectWidth, rectHeight, 22);
+        } else {
+            this.ctx.rect(x - rectWidth / 2, y - rectHeight / 2, rectWidth, rectHeight);
+        }
+        this.ctx.fill();
+
+        // Glow/Border
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+
+        // Text
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.shadowBlur = 4;
+        this.ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        this.ctx.fillText(this.currentMessage, x, y);
+
+        this.ctx.restore();
     }
 
     drawCell(x, y) {

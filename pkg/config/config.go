@@ -17,8 +17,8 @@ const (
 // Speed and boost settings
 const (
 	BaseTick             = 16 * time.Millisecond  // Base tick interval (~60 FPS)
-	NormalTicksPerUpdate = 9                      // Normal speed: 16ms * 9 = 144ms (~150ms)
-	BoostTicksPerUpdate  = 3                      // Boost: 16ms * 3 = 48ms (~50ms)
+	NormalTicksPerUpdate = 18                     // Normal speed: 16ms * 18 = 288ms
+	BoostTicksPerUpdate  = 6                      // Boost: 16ms * 6 = 96ms
 	BoostTimeout         = 150 * time.Millisecond // Boost timeout duration
 	BoostThreshold       = 2                      // Consecutive key presses to trigger boost
 	KeyRepeatWindow      = 200 * time.Millisecond // Time window for consecutive key detection

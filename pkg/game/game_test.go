@@ -18,27 +18,23 @@ func TestFoodExpirationWithPause(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Check remaining time without pause (should be ~8 seconds)
+	// Since PausedTimeAtSpawn is 0, passing 0 pause time means no pause during its life
 	remaining1 := food.GetRemainingSeconds(0)
 	if remaining1 < 7 || remaining1 > 9 {
 		t.Errorf("Expected ~8 seconds remaining, got %d", remaining1)
 	}
 	t.Logf("After 2s real time, 0s pause: %d seconds remaining", remaining1)
 
-	// Simulate 5 seconds of pause time
-	pausedTime := 5 * time.Second
-
-	// Check remaining time with pause (should still be ~8 seconds)
+	// Now simulate that those 2 seconds actually happened WHILE the game was paused.
+	// So we pass 2 seconds as the current total game pause time.
+	// Since food.PausedTimeAtSpawn is 0, it calculates: elapsed = 2s - (2s - 0s) = 0s.
+	// Remaining should be the full 10s.
+	pausedTime := 2 * time.Second
 	remaining2 := food.GetRemainingSeconds(pausedTime)
-	if remaining2 < 7 || remaining2 > 9 {
-		t.Errorf("Expected ~8 seconds remaining with 5s pause, got %d", remaining2)
+	if remaining2 < 9 || remaining2 > 11 {
+		t.Errorf("Expected ~10 seconds remaining with 2s pause, got %d", remaining2)
 	}
-	t.Logf("After 2s real time, 5s pause: %d seconds remaining (timer paused correctly!)", remaining2)
-
-	// The key point: remaining time should be the same with or without pause
-	// because paused time is subtracted from elapsed time
-	if remaining1 != remaining2 {
-		t.Logf("✅ Timer correctly accounts for pause time (no change in countdown)")
-	}
+	t.Logf("After 2s real time, 2s pause: %d seconds remaining (correctly compensated!)", remaining2)
 }
 
 // TestFoodExpirationDuringPause tests expiration check during active pause
@@ -51,26 +47,28 @@ func TestFoodExpirationDuringPause(t *testing.T) {
 	}
 
 	// Without pause, should have 1 second remaining
-	remaining := food.GetRemainingSeconds(0)
-	t.Logf("Food without pause: %d seconds remaining", remaining)
-
 	if food.IsExpired(0) {
 		t.Error("Food should not be expired yet without pause")
 	}
 
-	// Simulate being paused for 5 seconds
-	pausedTime := 5 * time.Second
+	// Now simulate that the game has BEEN paused for 5 seconds total,
+	// BUT the food was spawned when the game had already been paused for 5 seconds.
+	// (e.g. food spawned during a pause, or pause happened before spawn)
+	food.PausedTimeAtSpawn = 5 * time.Second
 
-	// With 5s pause, should have 6 seconds remaining (9-5 = 4 elapsed, 10-4 = 6 remaining)
-	remainingWithPause := food.GetRemainingSeconds(pausedTime)
-	t.Logf("Food with 5s pause: %d seconds remaining", remainingWithPause)
-
-	if remainingWithPause < 5 || remainingWithPause > 7 {
-		t.Errorf("Expected ~6 seconds remaining with pause, got %d", remainingWithPause)
+	// If we pass 5s as current pause, pausedSinceSpawn = 5 - 5 = 0.
+	// Elapsed = 9s - 0 = 9s. Remaining = 10s - 9s = 1s.
+	if food.IsExpired(5 * time.Second) {
+		t.Error("Food should not be expired because it hasn't experienced any pause yet")
 	}
 
-	if food.IsExpired(pausedTime) {
-		t.Error("Food should not be expired when accounting for pause time")
+	// Now simulate a NEW 5-second pause occurring AFTER spawn.
+	// Current total pause = 10s.
+	// pausedSinceSpawn = 10 - 5 = 5s.
+	// Elapsed = 9s - 5s = 4s. Remaining = 10s - 4s = 6s.
+	remainingWithPause := food.GetRemainingSeconds(10 * time.Second)
+	if remainingWithPause < 5 || remainingWithPause > 7 {
+		t.Errorf("Expected ~6 seconds remaining with post-spawn pause, got %d", remainingWithPause)
 	}
 }
 
@@ -121,4 +119,39 @@ func TestGamePauseIntegration(t *testing.T) {
 	}
 
 	t.Log("✅ Pause integration test passed!")
+}
+
+// TestDirectionValidation tests that 180-degree turns are prevented,
+// even when multiple direction changes are attempted within a single tick.
+func TestDirectionValidation(t *testing.T) {
+	g := NewGame()
+	// Initial state: Direction={1,0}, LastMoveDir={1,0} (Moving Right)
+
+	// 1. Test basic 180-degree turn prevention
+	if g.SetDirection(Point{X: -1, Y: 0}) {
+		t.Error("Should have rejected immediate 180-degree turn (Left while moving Right)")
+	}
+
+	// 2. Test rapid input bug: Right -> Up -> Left
+	// Press Up
+	if !g.SetDirection(Point{X: 0, Y: -1}) {
+		t.Error("Should have allowed turning Up while moving Right")
+	}
+	// At this point: Direction={0,-1}, LastMoveDir={1,0}
+
+	// Press Left (Rapidly, before Update())
+	if g.SetDirection(Point{X: -1, Y: 0}) {
+		t.Error("Should have rejected turning Left because it's a 180-degree turn relative to the last move (Right)")
+	}
+
+	// 3. Test that it works correctly after Update()
+	g.Update() // Move Up. LastMoveDir becomes {0,-1}
+	if !g.SetDirection(Point{X: -1, Y: 0}) {
+		t.Error("Should have allowed turning Left after moving Up")
+	}
+	if g.SetDirection(Point{X: 0, Y: 1}) {
+		t.Error("Should have rejected turning Down because it's now a 180-degree turn relative to the last move (Up)")
+	}
+
+	t.Log("✅ Direction validation test passed!")
 }
