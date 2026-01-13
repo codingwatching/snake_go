@@ -8,12 +8,6 @@ A terminal-based Snake game written in Go, featuring emoji rendering and cross-p
 
 ## ✨ Features
 
-- 🎮 Classic snake gameplay
-- 🎨 Beautiful emoji-based rendering
-- ⌨️ Arrow keys and WASD controls
-- ⏸️ Pause/resume functionality
-- 💥 Crash explosion effects
-- 🔄 Quick restart after game over
 - 🤖 **AI Auto-Play (Demo Mode)** with space-awareness (Flood Fill)
 - 🔊 **Dynamic Sound Effects** (Web Audio synthesized)
 - 📳 **Haptic Feedback** for mobile devices
@@ -22,6 +16,24 @@ A terminal-based Snake game written in Go, featuring emoji rendering and cross-p
 - 📊 Real-time statistics (score, eating speed, food count)
 - 📦 Single binary, no runtime dependencies
 - 🌐 **Web & Terminal Support**
+
+## 📚 Documentation
+
+Detailed documentation on features and architecture can be found in the [docs/](./docs) directory:
+
+- **Features**
+  - [AI Auto-Play & Pathfinding](./docs/FEATURE_AI_AUTOPLAY.md)
+  - [Boost Mechanism](./docs/FEATURE_BOOST.md)
+  - [Position Scores & Bonuses](./docs/FEATURE_POSITION_BONUS.md)
+- **Architecture**
+  - [Web Version Overview](./docs/WEB_VERSION.md)
+  - [Web Architecture & Design](./docs/WEB_ARCHITECTURE.md)
+  - [Client vs Server Communication](./docs/CLIENT_VS_SERVER.md)
+  - [Code Structure](./docs/CODE_STRUCTURE.md)
+- **Optimization & Debugging**
+  - [Performance Optimizations](./docs/PERFORMANCE.md)
+  - [Bugfix: Pause Timer Logic](./docs/BUGFIX_PAUSE_TIMER.md)
+  - [Bugfix: Screen Drift Fix](./docs/BUGFIX_SCREEN_DRIFT.md)
 
 ## 🎯 Game Features
 
