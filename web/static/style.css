@@ -427,6 +427,11 @@ body {
     text-align: center;
     border: 2px solid rgba(255, 255, 255, 0.2);
     display: none;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 320px;
+    gap: 10px;
 }
 
 .game-overlay.show {
@@ -443,6 +448,12 @@ body {
 #overlayMessage {
     font-size: 1.2rem;
     opacity: 0.9;
+}
+
+.tap-hint {
+    font-size: 1.2rem;
+    opacity: 0.9;
+    font-weight: 400;
 }
 
 /* Controls Panel */
@@ -721,6 +732,8 @@ kbd {
     .game-overlay {
         padding: 20px;
         width: 80%;
+        flex-direction: column !important;
+        display: none;
     }
 
     #overlayTitle {

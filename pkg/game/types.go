@@ -72,9 +72,8 @@ type Game struct {
 	TimerStarted      bool          // Whether the竞技 timer has started
 
 	// Message system
-	Message         string        // Current message to display
-	MessageTime     time.Time     // When message was set
-	MessageDuration time.Duration // How long to show message
+	Message     string // Current message to display
+	MessageType string // Type of message: "normal", "bonus", "important"
 
 	// AI Competitor Snake
 	AISnake        []Point   `json:"aiSnake"`     // Body of the AI competitor
@@ -117,6 +116,7 @@ type GameState struct {
 	AutoPlay      bool         `json:"autoPlay"`
 	Difficulty    string       `json:"difficulty"`
 	Message       string       `json:"message,omitempty"`
+	MessageType   string       `json:"messageType,omitempty"` // "normal", "bonus", "important"
 	CrashPoint    *Point       `json:"crashPoint,omitempty"`
 	Obstacles     []Obstacle   `json:"obstacles"`
 	Fireballs     []*Fireball  `json:"fireballs"`

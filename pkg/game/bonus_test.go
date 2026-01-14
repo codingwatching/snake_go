@@ -113,20 +113,12 @@ func TestMessageSystem(t *testing.T) {
 	g := NewGame()
 
 	// Initially no message
-	if g.HasActiveMessage() {
-		t.Error("Should not have active message initially")
-	}
-
 	if g.GetMessage() != "" {
-		t.Error("Should return empty string when no active message")
+		t.Error("Should return empty string when no message set")
 	}
 
 	// Set a message
-	g.SetMessage("Test message", 1000)
-
-	if !g.HasActiveMessage() {
-		t.Error("Should have active message after setting")
-	}
+	g.SetMessage("Test message")
 
 	if g.GetMessage() != "Test message" {
 		t.Errorf("Expected 'Test message', got '%s'", g.GetMessage())

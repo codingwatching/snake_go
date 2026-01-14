@@ -160,13 +160,10 @@ func (g *Game) CheckTimeLimit() {
 		// Determine winner
 		if g.Score > g.AIScore {
 			g.Winner = "player"
-			g.SetMessage("🏁 时间到！你赢了！🏆", 5*time.Second)
 		} else if g.AIScore > g.Score {
 			g.Winner = "ai"
-			g.SetMessage("🏁 时间到！AI 赢了！🤖", 5*time.Second)
 		} else {
 			g.Winner = "draw"
-			g.SetMessage("🏁 时间到！平局！🤝", 5*time.Second)
 		}
 	}
 }
@@ -226,7 +223,7 @@ func (g *Game) UpdateAISnake() {
 		g.AISnake = []Point{{X: config.Width - 2, Y: config.Height - 2}}
 		g.AIDirection = Point{X: -1, Y: 0}
 		g.AILastDir = Point{X: -1, Y: 0}
-		g.SetMessage("🤖 AI 竞争者撞墙了！", 2*time.Second)
+		g.SetMessage("🤖 AI 竞争者撞墙了！")
 		return
 	}
 
@@ -276,7 +273,7 @@ func (g *Game) handleFoodCollision(pos Point, score *int, eaten *int, isPlayer b
 			if isPlayer {
 				bonusMsg := food.GetBonusMessage(config.Width, config.Height)
 				if bonusMsg != "" {
-					g.SetMessage(bonusMsg, 3*time.Second)
+					g.SetMessageWithType(bonusMsg, "bonus")
 				}
 				// Record score event for player
 				g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
@@ -310,9 +307,9 @@ func (g *Game) TogglePause() {
 func (g *Game) ToggleAutoPlay() {
 	g.AutoPlay = !g.AutoPlay
 	if g.AutoPlay {
-		g.SetMessage("🤖 自动模式已开启", 2*time.Second)
+		g.SetMessage("🤖 自动模式已开启")
 	} else {
-		g.SetMessage("👤 手动模式已恢复", 2*time.Second)
+		g.SetMessage("👤 手动模式已恢复")
 		g.Boosting = false
 	}
 }
@@ -400,27 +397,20 @@ func (g *Game) GetTotalPausedTime() time.Duration {
 	return totalPaused
 }
 
-// SetMessage sets a temporary message
-func (g *Game) SetMessage(message string, duration time.Duration) {
+// SetMessage sets a message with normal type
+func (g *Game) SetMessage(message string) {
+	g.SetMessageWithType(message, "normal")
+}
+
+// SetMessageWithType sets a message with specific type
+func (g *Game) SetMessageWithType(message string, msgType string) {
 	g.Message = message
-	g.MessageTime = time.Now()
-	g.MessageDuration = duration
+	g.MessageType = msgType
 }
 
 // GetMessage returns the current message
 func (g *Game) GetMessage() string {
-	if g.HasActiveMessage() {
-		return g.Message
-	}
-	return ""
-}
-
-// HasActiveMessage checks if message is active
-func (g *Game) HasActiveMessage() bool {
-	if g.Message == "" {
-		return false
-	}
-	return time.Since(g.MessageTime) < g.MessageDuration
+	return g.Message
 }
 
 // TrySpawnObstacle
@@ -569,7 +559,7 @@ func (g *Game) UpdateFireballs() {
 						// Hit head: Stun for 2 seconds
 						g.AIStunnedUntil = time.Now().Add(2 * time.Second)
 						g.Score += 50
-						g.SetMessage("🎯 爆头！AI 被眩晕了！", 2*time.Second)
+						g.SetMessage("🎯 爆头！AI 被眩晕了！")
 						g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
 							Pos:    fb.Pos,
 							Amount: 50,
@@ -647,6 +637,7 @@ func (g *Game) GetGameStateSnapshot(started bool, serverBoosting bool, difficult
 		AutoPlay:      g.AutoPlay,
 		Difficulty:    difficulty,
 		Message:       g.GetMessage(),
+		MessageType:   g.MessageType,
 		Obstacles:     g.Obstacles,
 		Fireballs:     g.Fireballs,
 		HitPoints:     g.HitPoints,
