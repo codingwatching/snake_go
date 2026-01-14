@@ -251,6 +251,60 @@ body {
     box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
 }
 
+/* Berserker Toggle Style */
+.berserker-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-left: 10px;
+    user-select: none;
+}
+
+.berserker-toggle:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+}
+
+.berserker-toggle:active {
+    transform: translateY(1px) scale(0.95);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.berserker-toggle.active {
+    background: rgba(245, 101, 101, 0.2);
+    border-color: rgba(245, 101, 101, 0.5);
+    box-shadow: 0 0 15px rgba(245, 101, 101, 0.2);
+    animation: pulse-danger 2s infinite;
+}
+
+.berserker-toggle.active .berserker-icon {
+    filter: drop-shadow(0 0 5px #f56565);
+}
+
+.berserker-toggle.active .berserker-label {
+    color: #feb2b2;
+}
+
+@keyframes pulse-danger {
+    0% {
+        box-shadow: 0 0 0 0 rgba(245, 101, 101, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(245, 101, 101, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(245, 101, 101, 0);
+    }
+}
+
 #mode-battle.active {
     background: #ed8936;
     color: #fff;

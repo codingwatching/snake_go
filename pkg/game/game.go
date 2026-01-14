@@ -205,21 +205,24 @@ func (g *Game) UpdateAISnake() {
 		return
 	}
 
-	// Decision logic
+	// Decision logic (decide direction and boosting status)
 	g.UpdateCompetitorAI()
-	g.AILastDir = g.AIDirection
 
-	// Move
+	// Move exactly once per update call for visual smoothness
+	g.moveAISnakeOnce()
+}
+
+// moveAISnakeOnce performs a single step for AI
+func (g *Game) moveAISnakeOnce() {
 	if len(g.AISnake) == 0 {
 		return
 	}
+
 	head := g.AISnake[0]
 	newHead := Point{X: head.X + g.AIDirection.X, Y: head.Y + g.AIDirection.Y}
 
 	// Collision check for AI
 	if g.checkCollision(newHead) {
-		// AI died, respawn in a corner after some time?
-		// For now just teleport to a safe spot or reset
 		g.AISnake = []Point{{X: config.Width - 2, Y: config.Height - 2}}
 		g.AIDirection = Point{X: -1, Y: 0}
 		g.AILastDir = Point{X: -1, Y: 0}
@@ -233,6 +236,7 @@ func (g *Game) UpdateAISnake() {
 	if !ate {
 		g.AISnake = g.AISnake[:len(g.AISnake)-1]
 	}
+	g.AILastDir = g.AIDirection
 }
 
 func (g *Game) checkCollision(p Point) bool {
@@ -311,6 +315,16 @@ func (g *Game) ToggleAutoPlay() {
 	} else {
 		g.SetMessage("👤 手动模式已恢复")
 		g.Boosting = false
+	}
+}
+
+// ToggleBerserkerMode toggles the aggressive AI mode
+func (g *Game) ToggleBerserkerMode() {
+	g.BerserkerMode = !g.BerserkerMode
+	if g.BerserkerMode {
+		g.SetMessageWithType("👹 狂暴模式：开启！", "important")
+	} else {
+		g.SetMessage("👤 狂暴模式：已关闭")
 	}
 }
 
@@ -506,18 +520,44 @@ func (g *Game) isCellEmpty(p Point) bool {
 	return true
 }
 
-// Fire
+// Fire allows the player to shoot a fireball
 func (g *Game) Fire() {
+	g.FireByType("player")
+}
+
+// FireByType allows specific owner to shoot a fireball
+func (g *Game) FireByType(owner string) {
 	if g.GameOver || g.Paused {
 		return
 	}
-	if time.Since(g.LastFireTime) < config.FireballCooldown {
+
+	var lastFire *time.Time
+	var head Point
+	var dir Point
+
+	if owner == "player" {
+		lastFire = &g.LastFireTime
+		if len(g.Snake) == 0 {
+			return
+		}
+		head = g.Snake[0]
+		dir = g.Direction
+	} else {
+		lastFire = &g.AILastFireTime
+		if len(g.AISnake) == 0 || g.AIStunned {
+			return
+		}
+		head = g.AISnake[0]
+		dir = g.AIDirection
+	}
+
+	if time.Since(*lastFire) < config.FireballCooldown {
 		return
 	}
-	head := g.Snake[0]
-	fb := &Fireball{Pos: head, Dir: g.Direction, SpawnTime: time.Now(), Owner: "player"}
+
+	fb := &Fireball{Pos: head, Dir: dir, SpawnTime: time.Now(), Owner: owner}
 	g.Fireballs = append(g.Fireballs, fb)
-	g.LastFireTime = time.Now()
+	*lastFire = time.Now()
 }
 
 // UpdateFireballs
@@ -543,6 +583,30 @@ func (g *Game) UpdateFireballs() {
 					}
 					hit = true
 					g.HitPoints = append(g.HitPoints, fb.Pos)
+					if fb.Owner == "ai" {
+						if i == 0 {
+							// Hit player head: heavy penalty
+							g.Score = max(0, g.Score-30)
+							g.SetMessage("⚠️ 警报！你被 AI 爆头了！")
+							g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
+								Pos:    fb.Pos,
+								Amount: -30,
+								Label:  "💔 HEADSHOT -30",
+							})
+						} else {
+							// Hit player body
+							g.Score = max(0, g.Score-10)
+							// Shrink player
+							if len(g.Snake) > 5 { // Don't shrink too small for playability
+								g.Snake = g.Snake[:len(g.Snake)-1]
+							}
+							g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
+								Pos:    fb.Pos,
+								Amount: -10,
+								Label:  "🔥 HIT -10",
+							})
+						}
+					}
 					break
 				}
 			}
@@ -648,6 +712,7 @@ func (g *Game) GetGameStateSnapshot(started bool, serverBoosting bool, difficult
 		AIStunned:     g.AIStunned,
 		Mode:          g.Mode,
 		ScoreEvents:   g.ScoreEvents,
+		Berserker:     g.BerserkerMode,
 	}
 
 	if g.GameOver {
@@ -665,4 +730,11 @@ func (g *Game) GetGameConfig() GameConfig {
 		GameDuration:     int(config.GameDuration.Seconds()),
 		FireballCooldown: int(config.FireballCooldown.Milliseconds()),
 	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

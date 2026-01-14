@@ -83,6 +83,8 @@ type Game struct {
 	AIScore        int       `json:"aiScore"`     // AI's score
 	AIStunnedUntil time.Time `json:"-"`           // When AI will recover from stun
 	AIStunned      bool      `json:"aiStunned"`   // Whether AI is currently stunned
+	AILastFireTime time.Time `json:"-"`           // Last time AI fired a fireball
+	BerserkerMode  bool      `json:"berserker"`   // Whether AI is in aggressive mode
 
 	// Obstacle system
 	Obstacles []Obstacle // Temporary walls in the middle of the board
@@ -128,6 +130,7 @@ type GameState struct {
 	AIStunned     bool         `json:"aiStunned"`
 	Mode          string       `json:"mode"`
 	ScoreEvents   []ScoreEvent `json:"scoreEvents"`
+	Berserker     bool         `json:"berserker"`
 }
 
 // GameConfig is a DTO for game settings sent to client on connect

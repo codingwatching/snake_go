@@ -17,7 +17,7 @@ func (g *Game) UpdateAI() {
 	g.SetDirection(newDir)
 
 	// Fireball logic for player AI
-	g.handleAIFire(g.Snake[0], g.Direction)
+	g.handleAIFire(g.Snake[0], g.Direction, "player")
 }
 
 // UpdateCompetitorAI decides the next move for the AI competitor
@@ -27,6 +27,36 @@ func (g *Game) UpdateCompetitorAI() {
 	}
 
 	newDir, boosting := g.CalculateBestMove(g.AISnake, g.AILastDir)
+
+	// Aggressive AI logic (only in Berserker Mode):
+	// AI boosts if it's far from its target OR if it wants to race the player
+	if g.BerserkerMode && !boosting && len(g.AISnake) > 0 {
+		head := g.AISnake[0]
+
+		// Find closest food to evaluate distance
+		closestDist := 1000
+		for _, f := range g.Foods {
+			d := abs(f.Pos.X-head.X) + abs(f.Pos.Y-head.Y)
+			if d < closestDist {
+				closestDist = d
+			}
+
+			// If player is also close to this food, boost to compete!
+			if len(g.Snake) > 0 {
+				playerDist := abs(f.Pos.X-g.Snake[0].X) + abs(f.Pos.Y-g.Snake[0].Y)
+				if d < 8 && playerDist < 8 {
+					boosting = true
+					break
+				}
+			}
+		}
+
+		// If food is far away, occasionally boost to close the gap
+		if closestDist > 10 && rand.Float32() < 0.2 {
+			boosting = true
+		}
+	}
+
 	g.AIBoosting = boosting
 
 	// Set AI direction (bypass SetDirection validation which is for player)
@@ -35,7 +65,53 @@ func (g *Game) UpdateCompetitorAI() {
 	}
 
 	// Fireball logic for AI competitor
-	// (AI competitor doesn't shoot fireballs yet to keep it simple, or we can add it)
+	if len(g.AISnake) > 0 {
+		if g.BerserkerMode {
+			g.handleAIFire(g.AISnake[0], g.AIDirection, "ai")
+		} else {
+			// Normal AI only clears obstacles, doesn't shoot at player
+			g.handleNormalAIFire(g.AISnake[0], g.AIDirection)
+		}
+	}
+}
+
+// handleNormalAIFire only shoots at obstacles, not players
+func (g *Game) handleNormalAIFire(head Point, dir Point) {
+	for dist := 1; dist <= 5; dist++ {
+		lookAhead := Point{X: head.X + dir.X*dist, Y: head.Y + dir.Y*dist}
+		if lookAhead.X <= 0 || lookAhead.X >= config.Width-1 || lookAhead.Y <= 0 || lookAhead.Y >= config.Height-1 {
+			break
+		}
+
+		isObstacle := false
+		for _, obs := range g.Obstacles {
+			for _, op := range obs.Points {
+				if op == lookAhead {
+					isObstacle = true
+					break
+				}
+			}
+			if isObstacle {
+				break
+			}
+		}
+
+		if isObstacle {
+			g.FireByType("ai")
+			break
+		}
+
+		isFood := false
+		for _, f := range g.Foods {
+			if f.Pos == lookAhead {
+				isFood = true
+				break
+			}
+		}
+		if isFood {
+			break
+		}
+	}
 }
 
 // CalculateBestMove computes the best next move for a given snake
@@ -145,31 +221,54 @@ func (g *Game) CalculateBestMove(snake []Point, lastMoveDir Point) (Point, bool)
 	return bestDir, shouldBoost
 }
 
-func (g *Game) handleAIFire(head Point, dir Point) {
-	for dist := 1; dist <= 5; dist++ {
+func (g *Game) handleAIFire(head Point, dir Point, owner string) {
+	// Look further for targets (up to 10 tiles)
+	for dist := 1; dist <= 10; dist++ {
 		lookAhead := Point{X: head.X + dir.X*dist, Y: head.Y + dir.Y*dist}
 		if lookAhead.X <= 0 || lookAhead.X >= config.Width-1 || lookAhead.Y <= 0 || lookAhead.Y >= config.Height-1 {
 			break
 		}
 
-		isBlocked := false
+		// Check for obstacles
+		isObstacle := false
 		for _, obs := range g.Obstacles {
 			for _, op := range obs.Points {
 				if op == lookAhead {
-					isBlocked = true
+					isObstacle = true
 					break
 				}
 			}
-			if isBlocked {
+			if isObstacle {
 				break
 			}
 		}
 
-		if isBlocked {
-			g.Fire()
+		// Check for enemy snakes
+		isTarget := false
+		if owner == "ai" {
+			// AI targets player
+			for _, s := range g.Snake {
+				if s == lookAhead {
+					isTarget = true
+					break
+				}
+			}
+		} else {
+			// Player AI targets AI competitor
+			for _, s := range g.AISnake {
+				if s == lookAhead {
+					isTarget = true
+					break
+				}
+			}
+		}
+
+		if isObstacle || isTarget {
+			g.FireByType(owner)
 			break
 		}
 
+		// Don't shoot through food
 		isFood := false
 		for _, f := range g.Foods {
 			if f.Pos == lookAhead {

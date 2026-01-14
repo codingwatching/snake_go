@@ -222,6 +222,12 @@ class SnakeGameClient {
         this.processEvents();
         this.updateOverlay();
         this.checkGameOver(currentScore);
+
+        // Update Berserker toggle UI
+        const berserkerToggle = document.getElementById('berserker-toggle');
+        if (berserkerToggle) {
+            berserkerToggle.classList.toggle('active', !!this.gameState.berserker);
+        }
     }
 
     updateOverlay() {
@@ -434,6 +440,18 @@ class SnakeGameClient {
                 }
             });
         });
+
+        // AI Toggle
+        document.getElementById('ai-btn')?.addEventListener('click', () => {
+            this.ws.send(JSON.stringify({ action: 'auto' }));
+        });
+
+        // Berserker Toggle
+        const berserkerBtn = document.getElementById('berserker-toggle');
+        berserkerBtn?.addEventListener('click', () => {
+            console.log("Berserker toggle clicked");
+            this.ws.send(JSON.stringify({ action: 'toggleBerserker' }));
+        });
     }
 
     setupAutoPlay() { document.getElementById('btn-auto')?.addEventListener('click', () => this.ws.send(JSON.stringify({ action: 'auto' }))); }
@@ -460,6 +478,7 @@ class SnakeGameClient {
 
     updateConnectionStatus(status) {
         const el = document.getElementById('connectionStatus');
+        if (!el) return;
         el.querySelector('.status-text').textContent = status === 'connected' ? 'Connected' : (status === 'disconnected' ? 'Disconnected' : 'Connecting...');
         el.classList.toggle('connected', status === 'connected');
     }

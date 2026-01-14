@@ -148,6 +148,10 @@ func (gs *GameServer) handleAction(action string) {
 		if !gs.game.GameOver && !gs.game.Paused {
 			gs.game.Fire()
 		}
+	case "toggleBerserker":
+		if !gs.game.GameOver {
+			gs.game.ToggleBerserkerMode()
+		}
 	}
 
 	if isDirection {

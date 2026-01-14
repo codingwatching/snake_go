@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.0] - 2026-01-14
+
+### 👺 Berserker AI (Aggressive Mode)
+
+- **AI Auto-Boost**: AI competitor can now trigger 3x speed boost to snatch food, making it much more competitive.
+- **Offensive Fireball AI**:
+  - AI now actively targets and shoots at the player when in range.
+  - AI uses fireballs to clear obstacles blocking its path.
+- **Combat Balance**:
+  - Implemented player penalties when hit by AI fireballs:
+    - **Headshot**: -30 points and visual warning.
+    - **Body Hit**: -10 points and length reduction (-1 segment).
+- **Core Improvements**:
+  - Refactored AI movement to support sub-frame iterations for true speed boosting.
+  - Improved AI targeting range (up to 10 tiles).
+
+---
+
 ## [3.1.0] - 2026-01-14
 
 ### � Game Modes & Features
