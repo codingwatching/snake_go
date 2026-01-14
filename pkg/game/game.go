@@ -582,7 +582,7 @@ func (g *Game) UpdateFireballs() {
 						if len(g.AISnake) > 1 {
 							g.AISnake = g.AISnake[:len(g.AISnake)-1]
 						}
-						g.SetMessage("🔥 侧翼打击！AI 缩短了！", 1500*time.Millisecond)
+						// Removed middle message for body hits to keep UI cleaner
 						g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
 							Pos:    fb.Pos,
 							Amount: 20,
