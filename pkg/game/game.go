@@ -109,8 +109,14 @@ func (g *Game) TrySpawnFood() {
 
 // Update advances the player game state
 func (g *Game) Update() {
-	if g.GameOver {
+	if g.GameOver || g.Paused {
 		return
+	}
+
+	// Update stun status
+	g.PlayerStunned = time.Now().Before(g.PlayerStunnedUntil)
+	if g.PlayerStunned {
+		return // Skip movement if stunned
 	}
 
 	g.HitPoints = nil   // Clear previous hit points
@@ -585,19 +591,21 @@ func (g *Game) UpdateFireballs() {
 					g.HitPoints = append(g.HitPoints, fb.Pos)
 					if fb.Owner == "ai" {
 						if i == 0 {
-							// Hit player head: heavy penalty
+							// Hit player head: heavy penalty + Stun
 							g.Score = max(0, g.Score-30)
-							g.SetMessage("⚠️ 警报！你被 AI 爆头了！")
+							g.PlayerStunnedUntil = time.Now().Add(1500 * time.Millisecond)
+							g.SetMessageWithType("⚠️ 警报！你被 AI 爆头眩晕了！", "important")
 							g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
 								Pos:    fb.Pos,
 								Amount: -30,
 								Label:  "💔 HEADSHOT -30",
 							})
 						} else {
-							// Hit player body
+							// Hit player body: loss of score + short stun + shrink
 							g.Score = max(0, g.Score-10)
-							// Shrink player
-							if len(g.Snake) > 5 { // Don't shrink too small for playability
+							g.PlayerStunnedUntil = time.Now().Add(500 * time.Millisecond)
+							// Shrink player (as long as they have some length)
+							if len(g.Snake) > 2 {
 								g.Snake = g.Snake[:len(g.Snake)-1]
 							}
 							g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
@@ -709,7 +717,8 @@ func (g *Game) GetGameStateSnapshot(started bool, serverBoosting bool, difficult
 		AIScore:       g.AIScore,
 		TimeRemaining: g.GetTimeRemaining(),
 		Winner:        g.Winner,
-		AIStunned:     g.AIStunned,
+		AIStunned:     time.Now().Before(g.AIStunnedUntil),
+		PlayerStunned: time.Now().Before(g.PlayerStunnedUntil),
 		Mode:          g.Mode,
 		ScoreEvents:   g.ScoreEvents,
 		Berserker:     g.BerserkerMode,

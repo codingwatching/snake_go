@@ -371,7 +371,6 @@ body {
 
 .auto-btn.active {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: #fff;
     box-shadow: 0 4px 15px rgba(118, 75, 162, 0.4);
     animation: autoGlow 2s infinite;
 }

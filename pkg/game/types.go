@@ -51,25 +51,27 @@ type ScoreEvent struct {
 
 // Game represents the main game state
 type Game struct {
-	Snake             []Point
-	Foods             []Food // Multiple food items
-	Direction         Point
-	LastMoveDir       Point // Direction of the last performed move
-	Score             int
-	ScoreEvents       []ScoreEvent `json:"scoreEvents"` // Recent scoring events
-	GameOver          bool
-	Paused            bool          // Pause state
-	AutoPlay          bool          // Auto-play / Demo mode active
-	Boosting          bool          // Active boosting state
-	CrashPoint        Point         // Collision position
-	StartTime         time.Time     // Game start time
-	EndTime           time.Time     // Game end time
-	FoodEaten         int           // Number of foods eaten
-	PausedTime        time.Duration // Accumulated pause time
-	PauseStart        time.Time     // Pause start time
-	LastFoodSpawn     time.Time     // Last food spawn time
-	LastObstacleSpawn time.Time     // Last obstacle spawn time
-	TimerStarted      bool          // Whether the竞技 timer has started
+	Snake              []Point
+	Foods              []Food // Multiple food items
+	Direction          Point
+	LastMoveDir        Point // Direction of the last performed move
+	Score              int
+	ScoreEvents        []ScoreEvent `json:"scoreEvents"` // Recent scoring events
+	GameOver           bool
+	PlayerStunnedUntil time.Time     `json:"-"`
+	PlayerStunned      bool          `json:"playerStunned"`
+	Paused             bool          // Pause state
+	AutoPlay           bool          // Auto-play / Demo mode active
+	Boosting           bool          // Active boosting state
+	CrashPoint         Point         // Collision position
+	StartTime          time.Time     // Game start time
+	EndTime            time.Time     // Game end time
+	FoodEaten          int           // Number of foods eaten
+	PausedTime         time.Duration // Accumulated pause time
+	PauseStart         time.Time     // Pause start time
+	LastFoodSpawn      time.Time     // Last food spawn time
+	LastObstacleSpawn  time.Time     // Last obstacle spawn time
+	TimerStarted       bool          // Whether the竞技 timer has started
 
 	// Message system
 	Message     string // Current message to display
@@ -128,6 +130,7 @@ type GameState struct {
 	TimeRemaining int          `json:"timeRemaining"`
 	Winner        string       `json:"winner"`
 	AIStunned     bool         `json:"aiStunned"`
+	PlayerStunned bool         `json:"playerStunned"`
 	Mode          string       `json:"mode"`
 	ScoreEvents   []ScoreEvent `json:"scoreEvents"`
 	Berserker     bool         `json:"berserker"`

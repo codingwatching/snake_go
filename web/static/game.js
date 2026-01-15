@@ -201,6 +201,12 @@ class SnakeGameClient {
         }
         this.lastAIStunned = this.gameState.aiStunned;
 
+        if (this.gameState.playerStunned && !this.lastPlayerStunned) {
+            this.triggerHaptic([50, 50, 50]);
+            // You can add a specific hurt sound here if available
+        }
+        this.lastPlayerStunned = this.gameState.playerStunned;
+
         // Update elements
         this.scoreEl.textContent = currentScore;
         this.speedEl.textContent = (this.gameState.eatingSpeed || 0).toFixed(2);
@@ -223,10 +229,30 @@ class SnakeGameClient {
         this.updateOverlay();
         this.checkGameOver(currentScore);
 
+        // Update Difficulty buttons state
+        const currentDiff = this.gameState.difficulty || 'mid';
+        ['low', 'mid', 'high'].forEach(d => {
+            const btn = document.getElementById(`diff-${d}`);
+            if (btn) btn.classList.toggle('active', currentDiff === d);
+        });
+
+        // Update Mode buttons state
+        const currentMode = this.gameState.mode || 'battle';
+        ['battle', 'zen'].forEach(m => {
+            const btn = document.getElementById(`mode-${m}`);
+            if (btn) btn.classList.toggle('active', currentMode === m);
+        });
+
         // Update Berserker toggle UI
         const berserkerToggle = document.getElementById('berserker-toggle');
         if (berserkerToggle) {
             berserkerToggle.classList.toggle('active', !!this.gameState.berserker);
+        }
+
+        // Update Auto-Play button state
+        const autoBtn = document.getElementById('btn-auto');
+        if (autoBtn) {
+            autoBtn.classList.toggle('active', !!this.gameState.autoPlay);
         }
     }
 
@@ -459,8 +485,6 @@ class SnakeGameClient {
     setupMode() {
         const setMode = (mode) => {
             this.ws.send(JSON.stringify({ action: `mode_${mode}` }));
-            document.getElementById('mode-battle').classList.toggle('active', mode === 'battle');
-            document.getElementById('mode-zen').classList.toggle('active', mode === 'zen');
             this.showTempMessage(`${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode Activated`);
         };
         document.getElementById('mode-battle').onclick = () => setMode('battle');

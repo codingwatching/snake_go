@@ -48,13 +48,14 @@ export class GameRenderer {
 
         // Draw player snake
         if (gameState.snake) {
+            const isPlayerStunned = gameState.playerStunned;
             gameState.snake.forEach((segment, index) => {
                 if (index === 0) {
-                    this.ctx.fillStyle = '#48bb78';
+                    this.ctx.fillStyle = isPlayerStunned ? '#a0aec0' : '#48bb78';
                     this.drawCell(segment.x, segment.y);
-                    this.drawEyes(segment.x, segment.y, false);
+                    this.drawEyes(segment.x, segment.y, false, isPlayerStunned);
                 } else {
-                    this.ctx.fillStyle = '#68d391';
+                    this.ctx.fillStyle = isPlayerStunned ? '#cbd5e0' : '#68d391';
                     this.drawCell(segment.x, segment.y);
                 }
             });
@@ -116,14 +117,7 @@ export class GameRenderer {
             this.ctx.fill();
 
             if (isStunned) {
-                this.ctx.strokeStyle = '#fff';
-                this.ctx.lineWidth = 1;
-                this.ctx.beginPath();
-                this.ctx.moveTo(centerX - 6, centerY - 6); this.ctx.lineTo(centerX - 2, centerY - 2);
-                this.ctx.moveTo(centerX - 2, centerY - 6); this.ctx.lineTo(centerX - 6, centerY - 2);
-                this.ctx.moveTo(centerX + 2, centerY - 6); this.ctx.lineTo(centerX + 6, centerY - 2);
-                this.ctx.moveTo(centerX + 6, centerY - 6); this.ctx.lineTo(centerX + 2, centerY - 2);
-                this.ctx.stroke();
+                this.drawXEyes(centerX, centerY);
             } else {
                 this.ctx.fillStyle = '#e53e3e';
                 this.ctx.beginPath();
@@ -132,12 +126,29 @@ export class GameRenderer {
                 this.ctx.fill();
             }
         } else {
-            this.ctx.fillStyle = '#000';
+            this.ctx.fillStyle = isStunned ? '#4a5568' : '#000';
             this.ctx.beginPath();
             this.ctx.arc(centerX - 4, centerY - 4, 2, 0, Math.PI * 2);
             this.ctx.arc(centerX + 4, centerY - 4, 2, 0, Math.PI * 2);
             this.ctx.fill();
+
+            if (isStunned) {
+                this.drawXEyes(centerX, centerY, 4);
+            }
         }
+    }
+
+    drawXEyes(centerX, centerY, size = 6) {
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        // Left eye X
+        this.ctx.moveTo(centerX - 4 - size / 2, centerY - 4 - size / 2); this.ctx.lineTo(centerX - 4 + size / 2, centerY - 4 + size / 2);
+        this.ctx.moveTo(centerX - 4 + size / 2, centerY - 4 - size / 2); this.ctx.lineTo(centerX - 4 - size / 2, centerY - 4 + size / 2);
+        // Right eye X
+        this.ctx.moveTo(centerX + 4 - size / 2, centerY - 4 - size / 2); this.ctx.lineTo(centerX + 4 + size / 2, centerY - 4 + size / 2);
+        this.ctx.moveTo(centerX + 4 + size / 2, centerY - 4 - size / 2); this.ctx.lineTo(centerX + 4 - size / 2, centerY - 4 + size / 2);
+        this.ctx.stroke();
     }
 
     drawFood(food, isActive = true) {
