@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.3.0] - 2026-01-16
+
+### 📼 Game Recording System
+- **Full Session Recording**:
+  - Automatically captures every game session from start to finish.
+  - Data stored in **JSONL** format (one JSON object per line) for easy parsing and ML training.
+  - Records full game state, player actions, AI context, and rewards at every frame.
+- **Data Engineering**:
+  - Unique session IDs based on timestamp and connection UUID.
+  - Asynchronous, non-blocking disk writing to ensure zero impact on game server performance.
+  - Captures complex events: `Action`, `Reward` (sparse & dense), `AI Stun`, `Collision`.
+
+### 📺 Replay & Visualization Tool
+- **Dedicated Replay Server**:
+  - New binary `replay` running on port **8081**.
+  - Web interface to list and browse all recorded game sessions.
+- **High-Fidelity Playback**:
+  - Pixel-perfect recreation of the original game using the exact same frontend engine (`game.js`).
+  - Supports full visual effects: particles, floating texts, animations.
+  - Displays auxiliary AI data: **Step Count** and **AI Intent** (e.g., HUNT, ATTACK).
+- **Control Features**:
+  - Pause/Resume during playback.
+  - Seek bar logic (implicit via step tracking).
+  - Handles edge cases like varying canvas sizes and network configs via recorded `config` packets.
+
+### 🐛 Fixes & Polish
+- **Stability**:
+  - Fixed binary ignore rules in `.gitignore` to prevent committing build artifacts.
+  - Removed accidental binary commitments from history.
+- **Replay UX**:
+  - Solved "Black Screen" issue by correctly replaying `config` packets to initialization canvas.
+  - Fixed Overlay display logic to ensure Game Over screens render correctly in replay mode (re-attached DOM elements).
+
+---
+
 ## [3.2.0] - 2026-01-14
 
 ### 👺 Berserker AI (Aggressive Mode)
