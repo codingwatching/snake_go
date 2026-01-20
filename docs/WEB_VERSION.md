@@ -175,7 +175,7 @@ air
 
 ## 📝 许可
 
-MIT License
+Non-Commercial Personal Use License
 
 ---
 

@@ -4,7 +4,7 @@ A modern Snake game written in Go, featuring both **Terminal** and **Web** versi
 
 ![Go Version](https://img.shields.io/badge/Go-1.19+-00ADD8?style=flat&logo=go)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-Non--Commercial-orange)
 
 ## ✨ Features
 
@@ -264,7 +264,7 @@ golangci-lint run
 
 ## 📄 License
 
-MIT License
+Non-Commercial Personal Use License
 
 ## 🤝 Contributing
 
