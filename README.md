@@ -29,15 +29,15 @@ A modern Snake game written in Go, featuring both **Terminal** and **Web** versi
 Detailed documentation on features and architecture can be found in the [docs/](./docs) directory:
 
 - **Features**
-  - [AI Auto-Play & Pathfinding](./docs/FEATURE_AI_AUTOPLAY.md)
+  - [Neural & Hybrid AI Auto-Play](./docs/FEATURE_AI_AUTOPLAY.md)
   - [Boost Mechanism](./docs/FEATURE_BOOST.md)
   - [Position Scores & Bonuses](./docs/FEATURE_POSITION_BONUS.md)
 - **Architecture & AI**
   - [High-Performance AI Architecture](./docs/AI_ARCHITECTURE.md)
-  - [RL Training Design](./docs/AI_TRAINING_DESIGN.md)
+  - [RL Training & Reward Design](./docs/AI_TRAINING_DESIGN.md)
+  - [ML Pipeline & Dataset Guide](./ml/README.md)
   - [Web Version Overview](./docs/WEB_VERSION.md)
-  - [Web Architecture & Design](./docs/WEB_ARCHITECTURE.md)
-  - [Client vs Server Communication](./docs/CLIENT_VS_SERVER.md)
+  - [Client vs Server Sync Engine](./docs/CLIENT_VS_SERVER.md)
   - [Code Structure](./docs/CODE_STRUCTURE.md)
 - **Optimization & Debugging**
   - [Performance Optimizations](./docs/PERFORMANCE.md)
@@ -63,15 +63,20 @@ Detailed documentation on features and architecture can be found in the [docs/](
 
 ### 🔥 High-Performance AI System
 - **Brain**: 3-layer Convolutional Neural Network (CNN) trained via Reinforcement Learning (DQN).
-- **Inference**: Powered by **ONNX Runtime** with C++ optimization.
-- **Micro-Latency**: Centralized task queue + dedicated worker pattern achieving **<1.5ms** inference latency.
-- **Hybrid Control**: Deep learning handles strategic movement, while heuristics manage combat and boost tactics.
-- **Safety Layer**: Real-time collision look-ahead to prevent AI "hallucination" suicides.
+- **Inference**: Powered by **ONNX Runtime** with C++ acceleration.
+- **Latency**: Centralized task queue + worker pattern achieving **<1.5ms** total latency.
+- **Hybrid Control**: Deep learning strategic movement + Heuristic safety fallback.
+- **Safety Gate**: Physical collision look-ahead prevents suicidal moves during inference.
+
+### 🌐 High-Fidelity Sync Engine
+- **BaseTick**: 16ms (matches 60 FPS display refresh rate).
+- **Dual-Bus Logic**: Instant input response (Reader Goroutine) + Precise physical updates (Main Loop).
+- **UI Responsiveness**: Immediate state push on user action to eliminate perceived input lag.
 
 ### 📼 Recording & Replay
 - **Data Capture**: Every frame is recorded to `.jsonl` files (S, A, R, S' transitions).
 - **AI Training**: Seamless pipeline from game logs to PyTorch training and ONNX export.
-- **Visual Replay**: High-fidelity replay tool to analyze AI behavior and strategy.
+- **Visual Replay**: High-fidelity replay tool running on port 8081.
 
 ### Countdown Display
 Foods show a visual countdown timer with pulsating animation in the last 5 seconds
