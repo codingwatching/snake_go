@@ -216,7 +216,7 @@ export class GameRenderer {
         const progress = (Date.now() - exp.startTime) / exp.duration;
         this.ctx.save();
         const radius = (this.cellSize * 1.5) * progress;
-        this.ctx.globalAlpha = 1 - progress;
+        this.ctx.globalAlpha = Math.max(0, 1 - progress);
         const grad = this.ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
         grad.addColorStop(0, '#fff');
         grad.addColorStop(0.3, '#ff0');
@@ -232,7 +232,7 @@ export class GameRenderer {
     drawConfetti(confetti) {
         confetti.forEach(p => {
             this.ctx.save();
-            this.ctx.globalAlpha = p.life;
+            this.ctx.globalAlpha = Math.max(0, p.life);
             this.ctx.fillStyle = p.color;
             this.ctx.translate(p.x, p.y);
             this.ctx.rotate(p.rotation);
@@ -251,28 +251,63 @@ export class GameRenderer {
     }
 
     drawFloatingScores(scores) {
+        if (!scores || scores.length === 0) return;
+        const now = Date.now();
+
+        this.ctx.save();
+        // Reset shadow to avoid bleed from other renderers
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowColor = 'transparent';
+
         scores.forEach(s => {
-            this.ctx.globalAlpha = s.life;
-            const paddingH = 8, paddingV = 4;
+            const age = now - s.startTime;
+            const progress = age / s.duration;
+            if (progress >= 1) return;
+
+            // Calculate alpha: stay solid for 20%, then fade linearly to 0
+            let alpha = 1.0;
+            const fadeStart = 0.2;
+            if (progress > fadeStart) {
+                alpha = 1.0 - (progress - fadeStart) / (1.0 - fadeStart);
+            }
+
+            // Critical: Absolute clamping
+            alpha = Math.max(0, Math.min(1, alpha));
+
+            // Hard Cutoff: Lowered threshold for more noticeable fade
+            if (alpha < 0.05) return;
+
+            this.ctx.save();
+            this.ctx.globalAlpha = alpha;
+
             this.ctx.font = 'bold 13px Inter, sans-serif';
             const textWidth = this.ctx.measureText(s.text).width;
-
-            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-            const x = s.x - (textWidth / 2) - paddingH;
-            const y = s.y - 10 - paddingV;
+            const paddingH = 8, paddingV = 4;
             const w = textWidth + (paddingH * 2), h = 14 + (paddingV * 2);
+            const x = s.x - w / 2;
+            const y = s.y - 10 - paddingV;
 
+            // Draw background pill
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Solid dark background
             this.ctx.beginPath();
             this.ctx.roundRect(x, y, w, h, 10);
             this.ctx.fill();
+
+            // Border
             this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            this.ctx.lineWidth = 1;
             this.ctx.stroke();
 
+            // Text
             this.ctx.fillStyle = s.color;
             this.ctx.textAlign = 'center';
-            this.ctx.fillText(s.text, s.x, s.y);
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(s.text, s.x, y + h / 2);
+
+            this.ctx.restore();
         });
-        this.ctx.globalAlpha = 1.0;
+
+        this.ctx.restore();
     }
 
     drawCanvasMessage(msg, startTime, messageType = 'normal') {
@@ -281,8 +316,8 @@ export class GameRenderer {
 
         // Calculate display duration based on message type
         const maxDuration = messageType === 'permanent' ? Infinity :
-            (messageType === 'bonus' ? 800 : 1000);
-        const fadeStart = maxDuration - 500;
+            (messageType === 'bonus' ? 600 : 700);
+        const fadeStart = maxDuration - 300;
 
         // Check if message has expired
         if (age > maxDuration) return;
@@ -299,7 +334,7 @@ export class GameRenderer {
         const y = messageType === 'bonus' ? this.canvas.height / 5 : this.canvas.height / 5;
 
         this.ctx.save();
-        this.ctx.globalAlpha = displayAlpha;
+        this.ctx.globalAlpha = Math.max(0, displayAlpha);
 
         // Different font sizes based on message type
         const fontSize = messageType === 'bonus' ? 16 : (messageType === 'permanent' ? 28 : 18);

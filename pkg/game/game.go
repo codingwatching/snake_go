@@ -642,6 +642,10 @@ func (g *Game) UpdateFireballs() {
 					}
 					hit = true
 					g.HitPoints = append(g.HitPoints, fb.Pos)
+					// Protection: if AI is already stunned, hitting it again has no effect
+					if time.Now().Before(g.AIStunnedUntil) {
+						break
+					}
 					if i == 0 {
 						// Hit head: Stun for 2 seconds
 						g.AIStunnedUntil = time.Now().Add(2 * time.Second)

@@ -75,6 +75,8 @@ func (gs *GameServer) getGameState() game.GameState {
 	// Important: Clear events after they are captured for the current state update
 	// to prevent the client from creating duplicate floating bubbles.
 	gs.game.ScoreEvents = nil
+	gs.game.Message = ""
+	gs.game.MessageType = ""
 
 	return state
 }
@@ -121,6 +123,22 @@ func (gs *GameServer) checkBoostKey(inputDir game.Point) {
 	}
 }
 
+func (gs *GameServer) startGame() {
+	if gs.started {
+		return
+	}
+	gs.started = true
+	gs.tickCount = 0
+	gs.game.TimerStarted = true
+	gs.game.StartTime = time.Now()
+	gs.game.LastFoodSpawn = time.Now()
+	if len(gs.game.Foods) > 0 {
+		gs.game.Foods[0].SpawnTime = time.Now()
+		gs.game.Foods[0].PausedTimeAtSpawn = gs.game.GetTotalPausedTime()
+	}
+	gs.startRecording()
+}
+
 func (gs *GameServer) handleAction(action string) {
 	var inputDir game.Point
 	var isDirection bool
@@ -141,25 +159,13 @@ func (gs *GameServer) handleAction(action string) {
 	case "pause":
 		if !gs.game.GameOver {
 			if !gs.started {
-				gs.started = true
-				gs.tickCount = 0
-				gs.game.TimerStarted = true
-				gs.game.StartTime = time.Now()
-				gs.game.LastFoodSpawn = time.Now()
-				if len(gs.game.Foods) > 0 {
-					gs.game.Foods[0].SpawnTime = time.Now()
-					gs.game.Foods[0].PausedTimeAtSpawn = gs.game.GetTotalPausedTime()
-				}
-				gs.startRecording()
+				gs.startGame()
 			} else {
 				gs.game.TogglePause()
 			}
 		}
 	case "start":
-		if !gs.started {
-			gs.started = true
-			gs.startRecording()
-		}
+		gs.startGame()
 	case "restart":
 		// Force stop even if game wasn't over (shouldn't happen with current UI logic)
 		gs.stopRecording()
@@ -212,15 +218,7 @@ func (gs *GameServer) handleAction(action string) {
 
 	if isDirection {
 		if !gs.started {
-			gs.started = true
-			gs.game.TimerStarted = true
-			gs.tickCount = 0
-			gs.game.StartTime = time.Now()
-			gs.game.LastFoodSpawn = time.Now()
-			if len(gs.game.Foods) > 0 {
-				gs.game.Foods[0].SpawnTime = time.Now()
-			}
-			gs.startRecording()
+			gs.startGame()
 		}
 		dirChanged := gs.game.SetDirection(inputDir)
 

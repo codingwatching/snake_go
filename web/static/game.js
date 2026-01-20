@@ -1,5 +1,5 @@
 import { SoundManager } from './modules/audio.js';
-import { GameRenderer } from './modules/renderer.js';
+import { GameRenderer } from './modules/renderer.js?v=2.3';
 
 export class SnakeGameClient {
     constructor() {
@@ -128,14 +128,15 @@ export class SnakeGameClient {
         this.explosions = this.explosions.filter(exp => now - exp.startTime < exp.duration);
 
         // 2. Update and Filter Floating Scores
-        this.floatingScores = this.floatingScores.filter(s => s.life > 0);
+        const scoreDuration = 1200; // 1.2 seconds total
+        this.floatingScores = this.floatingScores.filter(s => now - s.startTime < scoreDuration);
         this.floatingScores.forEach(s => {
-            s.y -= 0.8; // Float up
-            s.life -= 0.015; // Fade out
+            const age = now - s.startTime;
+            // Float up faster at start, slower later
+            s.y -= 0.8;
         });
 
         // 3. Update and Filter Confetti
-        this.confetti = this.confetti.filter(p => p.life > 0);
         this.confetti.forEach(p => {
             p.x += p.vx;
             p.y += p.vy;
@@ -144,6 +145,7 @@ export class SnakeGameClient {
             p.rotation += p.spin;
             p.life -= p.decay;
         });
+        this.confetti = this.confetti.filter(p => p.life > 0);
     }
 
     setupWebSocket() {
@@ -309,7 +311,8 @@ export class SnakeGameClient {
                     x: ev.pos.x * this.cellSize + this.cellSize / 2,
                     y: ev.pos.y * this.cellSize,
                     text: ev.label,
-                    life: 1.0,
+                    startTime: Date.now(),
+                    duration: 1200,
                     color: ev.label.includes('HEADSHOT') ? '#f6e05e' : (ev.label.includes('HIT') ? '#fc8181' : '#63b3ed')
                 });
             });
@@ -409,6 +412,10 @@ export class SnakeGameClient {
     setupKeyboard() {
         document.addEventListener('keydown', (e) => {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+            // Allow system shortcuts (Cmd/Ctrl/Alt + Key) to pass through
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+
             const key = e.key.toLowerCase();
             const actionMap = {
                 'arrowup': 'up', 'w': 'up', 'arrowdown': 'down', 's': 'down',
@@ -497,7 +504,7 @@ export class SnakeGameClient {
         if (this.messageTimeout) clearTimeout(this.messageTimeout);
         this.messageTimeout = setTimeout(() => {
             if (this.currentMessage === msg) this.currentMessage = '';
-        }, 1500); // 1.5 seconds duration
+        }, 1000); // 1.0 seconds duration
     }
 
     updateConnectionStatus(status) {
