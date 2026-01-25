@@ -49,60 +49,61 @@ type ScoreEvent struct {
 	Label  string `json:"label"`
 }
 
+// Player represents a participant in the game (human or AI)
+type Player struct {
+	Snake        []Point    `json:"snake"`
+	Direction    Point      `json:"direction"`
+	LastMoveDir  Point      `json:"lastMoveDir"`
+	Score        int        `json:"score"`
+	FoodEaten    int        `json:"foodEaten"`
+	StunnedUntil time.Time  `json:"-"`
+	Stunned      bool       `json:"stunned"`
+	Boosting     bool       `json:"boosting"`
+	LastFireTime time.Time  `json:"-"`
+	Name         string     `json:"name"`
+	Brain        Controller `json:"-"`
+	Controller   string     `json:"controllerType"` // "manual", "heuristic", "neural"
+}
+
 // Game represents the main game state
 type Game struct {
-	Snake              []Point
-	Foods              []Food // Multiple food items
-	Direction          Point
-	LastMoveDir        Point // Direction of the last performed move
-	Score              int
-	LastScore          int          `json:"-"`           // Score from previous frame (for reward calc)
-	ScoreEvents        []ScoreEvent `json:"scoreEvents"` // Recent scoring events
-	GameOver           bool
-	PlayerStunnedUntil time.Time     `json:"-"`
-	PlayerStunned      bool          `json:"playerStunned"`
-	Paused             bool          // Pause state
-	AutoPlay           bool          // Auto-play / Demo mode active
-	Boosting           bool          // Active boosting state
-	CrashPoint         Point         // Collision position
-	StartTime          time.Time     // Game start time
-	EndTime            time.Time     // Game end time
-	FoodEaten          int           // Number of foods eaten
-	PausedTime         time.Duration // Accumulated pause time
-	PauseStart         time.Time     // Pause start time
-	LastFoodSpawn      time.Time     // Last food spawn time
-	LastObstacleSpawn  time.Time     // Last obstacle spawn time
-	TimerStarted       bool          // Whether the竞技 timer has started
+	Players           []*Player
+	Foods             []Food       // Multiple food items
+	LastScore         int          `json:"-"`           // Total score from previous frame (for reward calc - primarily for P1)
+	ScoreEvents       []ScoreEvent `json:"scoreEvents"` // Recent scoring events
+	GameOver          bool
+	Paused            bool          // Pause state
+	AutoPlay          bool          // Auto-play / Demo mode active (controls P1)
+	CrashPoint        Point         // Collision position
+	StartTime         time.Time     // Game start time
+	EndTime           time.Time     // Game end time
+	PausedTime        time.Duration // Accumulated pause time
+	PauseStart        time.Time     // Pause start time
+	LastFoodSpawn     time.Time     // Last food spawn time
+	LastObstacleSpawn time.Time     // Last obstacle spawn time
+	TimerStarted      bool          // Whether the竞技 timer has started
 
 	// Message system
 	Message     string // Current message to display
 	MessageType string // Type of message: "normal", "bonus", "important"
 
-	// AI Competitor Snake
-	AISnake        []Point   `json:"aiSnake"`     // Body of the AI competitor
-	AIDirection    Point     `json:"aiDirection"` // Current direction of AI
-	AILastDir      Point     `json:"aiLastDir"`   // Last moved direction of AI
-	AIBoosting     bool      `json:"aiBoosting"`  // Whether AI is boosting
-	AIScore        int       `json:"aiScore"`     // AI's score
-	AIStunnedUntil time.Time `json:"-"`           // When AI will recover from stun
-	AIStunned      bool      `json:"aiStunned"`   // Whether AI is currently stunned
-	AILastFireTime time.Time `json:"-"`           // Last time AI fired a fireball
-	BerserkerMode  bool      `json:"berserker"`   // Whether AI is in aggressive mode
-
 	// Obstacle system
 	Obstacles []Obstacle // Temporary walls in the middle of the board
 
 	// Fireball system
-	Fireballs    []*Fireball // Active projectiles
-	LastFireTime time.Time   // Cooldown management
-	HitPoints    []Point     `json:"hitPoints"` // Points where fireballs hit something
-	Winner       string      `json:"winner"`    // "player", "ai", or "draw"
-	Mode         string      `json:"mode"`      // "zen" or "battle"
+	Fireballs []*Fireball // Active projectiles
+	HitPoints []Point     `json:"hitPoints"` // Points where fireballs hit something
+	Winner    string      `json:"winner"`    // "player", "ai", or "draw"
+	Mode      string      `json:"mode"`      // "zen", "battle", or "pvp"
+	IsPVP     bool        `json:"isPVP"`
 
 	// Recording support
 	CurrentAIContext AIContext     `json:"-"` // Last calculated AI context
 	Recorder         *GameRecorder `json:"-"` // Active recorder
 	NeuralNet        *ONNXModel    `json:"-"` // Loaded AI Model (ONNX Runtime)
+
+	// Legacy support / Internal
+	BerserkerMode bool `json:"berserker"` // Whether AI (if any) is in aggressive mode
 }
 
 // FoodInfo is a DTO for food items sent to client
@@ -140,6 +141,9 @@ type GameState struct {
 	Mode          string       `json:"mode"`
 	ScoreEvents   []ScoreEvent `json:"scoreEvents"`
 	Berserker     bool         `json:"berserker"`
+	IsPVP         bool         `json:"isPVP"`
+	P1Name        string       `json:"p1Name"`
+	P2Name        string       `json:"p2Name"`
 }
 
 // GameConfig is a DTO for game settings sent to client on connect
@@ -185,4 +189,13 @@ type StepRecord struct {
 	AIContext AIContext  `json:"ai_context"`
 	Reward    float64    `json:"reward"`
 	Done      bool       `json:"done"`
+}
+
+// LeaderboardEntry represents a single entry in the global leaderboard
+type LeaderboardEntry struct {
+	Name       string    `json:"name"`
+	Score      int       `json:"score"`
+	Date       time.Time `json:"date"`
+	Difficulty string    `json:"difficulty"`
+	Mode       string    `json:"mode"`
 }

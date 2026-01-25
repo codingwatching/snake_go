@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🐍 Snake Game - Web Version</title>
-    <link rel="stylesheet" href="style.css?v=2.4">
+    <link rel="stylesheet" href="style.css?v=2.5">
 </head>
 
 <body>
@@ -14,6 +14,10 @@
         <header class="game-header">
             <h1>🐍 SNAKE GAME</h1>
             <p class="subtitle">Web Version - Premium Edition</p>
+            <div id="userInfoBar" class="user-info-bar hidden">
+                <span class="user-welcome">👋 Welcome, <strong id="displayUsername">Player</strong></span>
+                <button id="btnLogoutUser" class="nav-logout-btn">Logout</button>
+            </div>
         </header>
 
         <!-- Stats Panel -->
@@ -44,6 +48,11 @@
                 <span class="stat-value" id="timeLeft">30</span>
                 <span class="stat-unit">s</span>
             </div>
+            <div class="stat-item user-stats">
+                <span class="stat-label">Win Rate</span>
+                <span class="stat-value" id="winRate">0%</span>
+                <span class="stat-unit" id="gamesWon">0/0</span>
+            </div>
             <div class="stat-item boost-indicator" id="boostIndicator">
                 <span class="boost-icon">🚀</span>
                 <span class="boost-text">BOOST!</span>
@@ -56,6 +65,7 @@
             <div class="mode-options">
                 <button class="mode-btn active" id="mode-battle">⚔️ Battle</button>
                 <button class="mode-btn" id="mode-zen">🧘 Zen</button>
+                <button class="mode-btn" id="mode-pvp">👥 P2P Battle</button>
             </div>
             <div class="berserker-toggle" id="berserker-toggle" title="👹 Toggle Aggressive AI">
                 <span class="berserker-icon">👹</span>
@@ -73,6 +83,10 @@
             </div>
             <div class="auto-toggle">
                 <button class="auto-btn" id="btn-auto">🤖 Auto-Play</button>
+                <select id="auto-mode" class="auto-select">
+                    <option value="neural">🧠 Neural (RL)</option>
+                    <option value="heuristic" selected>📏 Heuristic (Rule-based)</option>
+                </select>
             </div>
         </div>
 
@@ -80,8 +94,12 @@
         <div class="game-container">
             <canvas id="gameCanvas"></canvas>
             <div class="game-overlay" id="gameOverlay">
-                <h2 id="overlayTitle">Ready to Play?</h2>
-                <p id="overlayMessage">Press SPACE to start</p>
+                <div class="overlay-content">
+                    <h2 id="overlayTitle">Ready to Play?</h2>
+                    <p id="overlayMessage">Press SPACE to start</p>
+                    <button id="cancelMatchBtn" class="cancel-btn hidden">Cancel Search</button>
+
+                </div>
             </div>
             <!-- Mobile Controls -->
             <div class="mobile-controls">
@@ -100,6 +118,18 @@
             </div>
         </div>
 
+        <!-- Leaderboard Panel -->
+        <div class="leaderboard-panel">
+            <h3>🏆 Hall of Fame</h3>
+            <div class="leaderboard-tabs">
+                <button class="tab-btn active" id="tabScore">Top Scores</button>
+                <button class="tab-btn" id="tabWinRate">Win Rates</button>
+            </div>
+            <div id="leaderboardList" class="leaderboard-list">
+                <p class="loading-text">Loading scores...</p>
+            </div>
+        </div>
+
         <!-- Controls Info -->
         <div class="controls-panel">
             <h3>🎮 Controls</h3>
@@ -111,7 +141,7 @@
                     <span>Move</span>
                 </div>
                 <div class="control-item">
-                    <kbd>Space</kbd> / <kbd>P</kbd>
+                    <kbd>Space</kbd>
                     <span>Pause</span>
                 </div>
                 <div class="control-item">
@@ -119,7 +149,7 @@
                     <span>Restart</span>
                 </div>
                 <div class="control-item">
-                    <kbd>A</kbd>
+                    <kbd>P</kbd>
                     <span>Auto-Play</span>
                 </div>
                 <div class="control-item">
@@ -159,14 +189,37 @@
             </div>
         </div>
 
+        <!-- Auth Overlay -->
+        <div class="auth-overlay" id="authOverlay">
+            <div class="auth-content">
+                <h2 id="authTitle">SNAKE LOGIN</h2>
+                <div class="auth-form">
+                    <input type="text" id="authUsername" placeholder="Username" maxlength="15">
+                    <input type="password" id="authPassword" placeholder="Password">
+                    <div class="auth-options">
+                        <label class="remember-me">
+                            <input type="checkbox" id="authRemember" checked>
+                            <span>Remember Me</span>
+                        </label>
+                    </div>
+                    <div class="auth-actions">
+                        <button id="btnLogin">Login</button>
+                        <button id="btnRegister" class="secondary">Register</button>
+                    </div>
+                </div>
+                <p id="authMessage"></p>
+            </div>
+        </div>
+
         <!-- Connection Status -->
         <div class="connection-status" id="connectionStatus">
             <span class="status-dot"></span>
             <span class="status-text">Connecting...</span>
+            <span class="player-count" id="totalPlayers">👥 0 Players</span>
         </div>
     </div>
 
-    <script type="module" src="game.js?v=2.3"></script>
+    <script type="module" src="game.js?v=2.4"></script>
 </body>
 
 </html>

@@ -102,20 +102,29 @@ func naiveRender(g *game.Game, boosting bool) {
 	}
 
 	// Draw snake
-	for i, p := range g.Snake {
-		if i == 0 {
-			board[p.Y][p.X] = cellHead
-		} else {
-			board[p.Y][p.X] = cellBody
+	if len(g.Players) > 0 {
+		for i, p := range g.Players[0].Snake {
+			if i == 0 {
+				board[p.Y][p.X] = cellHead
+			} else {
+				board[p.Y][p.X] = cellBody
+			}
 		}
 	}
 
 	// Multiple print calls (OLD WAY)
 	fmt.Println("\n  🐍 SNAKE GAME 🐍")
+	score := 0
+	foodEaten := 0
+	if len(g.Players) > 0 {
+		score = g.Players[0].Score
+		foodEaten = g.Players[0].FoodEaten
+	}
+
 	if boosting {
-		fmt.Printf("  Score: %d  |  已吃: %d 个  |  🚀 BOOST!\n\n", g.Score, g.FoodEaten)
+		fmt.Printf("  Score: %d  |  已吃: %d 个  |  🚀 BOOST!\n\n", score, foodEaten)
 	} else {
-		fmt.Printf("  Score: %d  |  已吃: %d 个\n\n", g.Score, g.FoodEaten)
+		fmt.Printf("  Score: %d  |  已吃: %d 个\n\n", score, foodEaten)
 	}
 
 	for _, row := range board {

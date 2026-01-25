@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.0] - 2026-01-26
+
+### 👥 Real-Time P2P Matchmaking
+- **MatchMaker Service**: Added a centralized lobby system for pairing players.
+  - Automated queue management with background matching logic.
+  - Interactive "Match Found" countdown and lobby state sync.
+- **Shared Game Instances**: Implemented a "Master-Observer" synchronization pattern for PVP.
+  - Two players share a single `Game` instance on the server for zero-offset state consistency.
+  - Role-based input routing (P1 vs P2) within the same engine tick.
+
+### 🏗️ Controller-Based Architecture (The Brain Overhaul)
+- **Controller Interface**: Replaced hardcoded input with a modular `Controller` pattern.
+  - **ManualController**: Handles human input via WebSockets.
+  - **HeuristicController**: Advanced rule-based AI (now works for any player slot).
+  - **NeuralController**: Reinforcement Learning (RL) agent.
+- **Dynamic Brain Swapping**: Support for real-time AI assistance.
+  - Toggle between Manual and AI modes mid-game.
+  - UI-selectable AI flavors (Neural vs Heuristic) during Auto-Play.
+- **Decoupled Viewports**: AI now perceives the game relative to its own head, enabling RL models to drive P2 snakes correctly.
+
+### ⚔️ Combat & Gameplay Overhaul
+- **Advanced Scoring & Penalties**:
+  - **Headshots**: Reward attacker with **+50 pts** and stun victim for **2 seconds** (No victim score loss).
+  - **Body Hits**: Reward attacker with **+10 pts** and remove **1 segment** from victim (No victim stun).
+- **Persistent Game-Over State**: 
+  - The game timer now **freezes** at the exact moment of collision instead of clearing to zero.
+- **Control Optimization**:
+  - Remapped Auto-Play toggle to **`P`** (Play) to avoid WASD conflicts.
+  - Spacebar is now the dedicated **Pause** key.
+- **Safety Polish**: Fixed the "180-degree turn" bug that caused accidental self-collisions during rapid input.
+
+### 💾 Persistence & Backend
+- **SQLite Integration**: Replaced raw file storage with a robust database layer.
+  - Fully persistent `users` table for accounts/passwords.
+  - `game_sessions` table for detailed match history.
+  - `leaderboard` table for high scores and win rates.
+- **Deployment**:
+  - Added full **Docker** & **Docker Compose** support for one-click deployment.
+  - Updated build scripts for multi-arch releases (Arm64/Amd64).
+
+---
+
 ## [4.1.0] - 2026-01-21
  
 ### 🛠️ Developer Experience & Environment

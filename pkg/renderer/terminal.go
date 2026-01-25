@@ -40,11 +40,6 @@ func NewTerminalRenderer() *TerminalRenderer {
 
 // clearScreen clears the terminal using ANSI escape codes
 func (r *TerminalRenderer) clearScreen() {
-	// Use multiple ANSI codes for maximum compatibility:
-	// \033[?25l - Hide cursor (optional, prevents flickering)
-	// \033[H - Move cursor to home position (1,1)
-	// \033[2J - Clear entire screen
-	// \033[3J - Clear scrollback buffer (prevent screen drift)
 	fmt.Print("\033[H\033[2J\033[3J")
 }
 
@@ -95,21 +90,25 @@ func (r *TerminalRenderer) Render(g *game.Game, boosting bool) {
 		r.board[y][config.Width-1] = cellWall
 	}
 
-	// Draw snake
-	for i, p := range g.Snake {
-		if i == 0 {
-			r.board[p.Y][p.X] = cellHead
-		} else {
-			r.board[p.Y][p.X] = cellBody
+	// Draw snake (P1)
+	if len(g.Players) > 0 {
+		for i, p := range g.Players[0].Snake {
+			if i == 0 {
+				r.board[p.Y][p.X] = cellHead
+			} else {
+				r.board[p.Y][p.X] = cellBody
+			}
 		}
 	}
 
-	// Draw AI snake
-	for i, p := range g.AISnake {
-		if i == 0 {
-			r.board[p.Y][p.X] = cellAIHead
-		} else {
-			r.board[p.Y][p.X] = cellAIBody
+	// Draw AI/P2 snake
+	if len(g.Players) > 1 {
+		for i, p := range g.Players[1].Snake {
+			if i == 0 {
+				r.board[p.Y][p.X] = cellAIHead
+			} else {
+				r.board[p.Y][p.X] = cellAIBody
+			}
 		}
 	}
 
@@ -121,7 +120,7 @@ func (r *TerminalRenderer) Render(g *game.Game, boosting bool) {
 		}
 	}
 
-	// Build output using string builder (single write is faster)
+	// Build output using string builder
 	r.buffer.WriteString("\n  🐍 SNAKE GAME 🐍\n")
 
 	// Header with stats
@@ -129,32 +128,38 @@ func (r *TerminalRenderer) Render(g *game.Game, boosting bool) {
 	if boosting {
 		boostStr = "  |  🚀 BOOST!"
 	}
-	r.buffer.WriteString(fmt.Sprintf("  Score: %d  |  AI Score: %d  |  Time Left: %ds  |  吃豆速度: %.2f 个/秒  |  已吃: %d 个%s\n",
-		g.Score, g.AIScore, g.GetTimeRemaining(), g.GetEatingSpeed(), g.FoodEaten, boostStr))
+	p1Score := 0
+	p1FoodEaten := 0
+	if len(g.Players) > 0 {
+		p1Score = g.Players[0].Score
+		p1FoodEaten = g.Players[0].FoodEaten
+	}
+	p2Score := 0
+	if len(g.Players) > 1 {
+		p2Score = g.Players[1].Score
+	}
 
-	// Show congratulatory message above the game board (always reserve the line)
+	r.buffer.WriteString(fmt.Sprintf("  Score: %d  |  AI/P2 Score: %d  |  Time Left: %ds  |  吃豆速度: %.2f 个/秒  |  已吃: %d 个%s\n",
+		p1Score, p2Score, g.GetTimeRemaining(), g.GetEatingSpeed(), p1FoodEaten, boostStr))
+
 	if msg := g.GetMessage(); msg != "" {
 		r.buffer.WriteString("  " + msg + "\n")
 	} else {
-		r.buffer.WriteString("\n") // Empty line when no message
+		r.buffer.WriteString("\n")
 	}
-	r.buffer.WriteString("\n") // Extra blank line before board
+	r.buffer.WriteString("\n")
 
 	// Render board
 	for y, row := range r.board {
 		r.buffer.WriteString("  ")
 		for x, cell := range row {
 			pos := game.Point{X: x, Y: y}
-
-			// Check for timer emoji first
 			if timer, hasTimer := timerEmojis[pos]; hasTimer && cell == cellEmpty {
 				r.buffer.WriteString(timer)
-				r.buffer.WriteString(" ") // Add space to match 2-char width
+				r.buffer.WriteString(" ")
 			} else if emoji, hasFood := foodEmojis[pos]; hasFood && cell == cellEmpty {
-				// Then check for food emoji
 				r.buffer.WriteString(emoji)
 			} else {
-				// Finally, render board cell
 				switch cell {
 				case cellEmpty:
 					r.buffer.WriteString(config.CharEmpty)
@@ -169,18 +174,16 @@ func (r *TerminalRenderer) Render(g *game.Game, boosting bool) {
 				case cellAIHead:
 					r.buffer.WriteString("🤖")
 				case cellAIBody:
-					r.buffer.WriteString("🤖") // Simple robot icon for AI body
+					r.buffer.WriteString("🤖")
 				}
 			}
 		}
 		r.buffer.WriteString("\n")
 	}
 
-	// Instructions
 	r.buffer.WriteString("\n  Use WASD or Arrow keys to move, hold direction key to boost 🚀\n")
 	r.buffer.WriteString("  P to pause, Q to quit\n")
 
-	// Game state messages
 	if g.Paused {
 		r.buffer.WriteString("\n  ⏸️  PAUSED - Press P to continue\n")
 	}
@@ -189,6 +192,5 @@ func (r *TerminalRenderer) Render(g *game.Game, boosting bool) {
 		r.buffer.WriteString("\n  💀 GAME OVER! Press R to restart or Q to quit\n")
 	}
 
-	// Single write to stdout (much faster than multiple fmt.Print calls)
 	fmt.Print(r.buffer.String())
 }

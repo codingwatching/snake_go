@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -44,10 +45,10 @@ func StartInferenceService(modelPath string) error {
 			// One model instance for the entire server
 			nn, nerr := loadModelInstance(modelPath)
 			if nerr != nil {
-				fmt.Printf("CRITICAL: AI Worker failed to load model: %v\n", nerr)
+				log.Printf("CRITICAL: AI Worker failed to load model: %v\n", nerr)
 				return
 			}
-			fmt.Println("🚀 Global AI Optimizer-Worker is now online (Queue-based)")
+			log.Println("🚀 Global AI Optimizer-Worker is now online (Queue-based)")
 
 			// The "Dumping" Loop
 			for req := range predictionQueue {

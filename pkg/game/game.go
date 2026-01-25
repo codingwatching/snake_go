@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"time"
 
@@ -11,35 +12,44 @@ import (
 // NewGame creates a new game instance
 func NewGame() *Game {
 	g := &Game{
-		Snake:             []Point{{X: config.Width / 2, Y: config.Height / 2}},
-		Direction:         Point{X: 1, Y: 0},
-		LastMoveDir:       Point{X: 1, Y: 0},
-		Score:             0,
-		GameOver:          false,
-		StartTime:         time.Now(),
-		FoodEaten:         0,
+		Players: []*Player{
+			{
+				Snake:       []Point{{X: config.Width / 2, Y: config.Height / 2}},
+				Direction:   Point{X: 1, Y: 0},
+				LastMoveDir: Point{X: 1, Y: 0},
+				Name:        "Player 1",
+				Brain:       &ManualController{},
+				Controller:  "manual",
+			},
+		},
 		Foods:             make([]Food, 0),
 		LastFoodSpawn:     time.Now(),
 		Obstacles:         make([]Obstacle, 0),
 		LastObstacleSpawn: time.Now(),
-		// Initialize AI competitor snake
-		AISnake:      []Point{{X: config.Width - 2, Y: config.Height - 2}},
-		AIDirection:  Point{X: -1, Y: 0},
-		AILastDir:    Point{X: -1, Y: 0},
-		AIScore:      0,
-		TimerStarted: true,
-		Mode:         "battle",
+		TimerStarted:      true,
+		StartTime:         time.Now(),
+		PauseStart:        time.Now(),
+		Mode:              "battle",
 	}
+
+	// In battle mode, add the second player (AI)
+	g.Players = append(g.Players, &Player{
+		Snake:       []Point{{X: config.Width - 2, Y: config.Height - 2}},
+		Direction:   Point{X: -1, Y: 0},
+		LastMoveDir: Point{X: -1, Y: 0},
+		Name:        "AI",
+		Brain:       &HeuristicController{},
+		Controller:  "heuristic",
+	})
+
 	// Start Global AI Inference Service if not already started
 	onnxPath := "ml/checkpoints/snake_policy.onnx"
 	err := StartInferenceService(onnxPath)
 	if err == nil {
-		// We use a dummy non-nil pointer for NeuralNet as a flag
-		// to indicate this game session should use the global AI service
 		g.NeuralNet = &ONNXModel{}
-		fmt.Println("🧠 Global AI Service (ONNX) is active for this game!")
+		log.Println("🧠 Global AI Service (ONNX) is active for this game!")
 	} else {
-		fmt.Printf("⚠️  Global AI Service Error: %v. Using Heuristic AI.\n", err)
+		log.Printf("⚠️  Global AI Service Error: %v. Using Heuristic AI.\n", err)
 	}
 
 	// Spawn initial food
@@ -119,49 +129,103 @@ func (g *Game) TrySpawnFood() {
 	}
 }
 
-// Update advances the player game state
+// Update advances the game state
 func (g *Game) Update() {
 	if g.GameOver || g.Paused {
 		return
 	}
 
-	// Update stun status
-	g.PlayerStunned = time.Now().Before(g.PlayerStunnedUntil)
-	if g.PlayerStunned {
-		return // Skip movement if stunned
-	}
-
 	g.HitPoints = nil   // Clear previous hit points
 	g.ScoreEvents = nil // Clear previous score events
 
-	if g.AutoPlay {
-		g.UpdateAI()
-	}
-	g.LastMoveDir = g.Direction
-
-	head := g.Snake[0]
-	newHead := Point{X: head.X + g.Direction.X, Y: head.Y + g.Direction.Y}
-
-	// Collision check for player
-	if g.checkCollision(newHead) {
-		g.GameOver = true
-		g.EndTime = time.Now()
-		g.CrashPoint = newHead
-		return
-	}
-
-	// Move snake
-	g.Snake = append([]Point{newHead}, g.Snake...)
-
-	// Food collision
-	ate := g.handleFoodCollision(newHead, &g.Score, &g.FoodEaten, true)
-	if !ate {
-		g.Snake = g.Snake[:len(g.Snake)-1]
+	// Update each player
+	for i := range g.Players {
+		g.UpdatePlayer(i)
 	}
 
 	g.TrySpawnFood()
 	g.TrySpawnObstacle()
 	g.CheckTimeLimit()
+}
+
+// UpdatePlayer advances a single player's state
+func (g *Game) UpdatePlayer(idx int) {
+	if idx >= len(g.Players) {
+		return
+	}
+	p := g.Players[idx]
+
+	// Update stun status
+	p.Stunned = time.Now().Before(p.StunnedUntil)
+	if p.Stunned {
+		return // Skip movement if stunned
+	}
+
+	// Brain decision logic: Get action from controller
+	if p.Brain != nil {
+		action := p.Brain.GetAction(g, idx)
+		if action.Direction.X != 0 || action.Direction.Y != 0 {
+			// VALIDATE: Prevent 180-degree turns
+			isOpposite := (action.Direction.X != 0 && p.LastMoveDir.X == -action.Direction.X) ||
+				(action.Direction.Y != 0 && p.LastMoveDir.Y == -action.Direction.Y)
+
+			if !isOpposite {
+				p.Direction = action.Direction
+			}
+		}
+		p.Boosting = action.Boost
+		if action.Fire {
+			g.FireByTypeIdx(idx)
+		}
+	}
+
+	p.LastMoveDir = p.Direction
+
+	head := p.Snake[0]
+	newHead := Point{X: head.X + p.Direction.X, Y: head.Y + p.Direction.Y}
+
+	// Collision check
+	if g.checkCollision(newHead) {
+		log.Printf("[Game] Collision detected for player %d at %+v (IsPVP: %v)", idx, newHead, g.IsPVP)
+		if g.IsPVP {
+			log.Printf("[Game] PVP COLLISION: Player %d hit something at %+v. IsPVP: %v", idx, newHead, g.IsPVP)
+			// In PVP, collision means the OTHER player wins
+			g.GameOver = true
+			g.EndTime = time.Now()
+			g.CrashPoint = newHead
+			if idx == 0 {
+				g.Winner = "ai" // P2 wins
+			} else {
+				g.Winner = "player" // P1 wins
+			}
+		} else {
+			if idx == 0 {
+				log.Printf("[Game] P1 COLLISION (Solo): Hit something at %+v", newHead)
+				// Player 1 dead
+				g.GameOver = true
+				g.EndTime = time.Now()
+				g.CrashPoint = newHead
+			} else {
+				// AI dead, reset it
+				p.Snake = []Point{{X: config.Width - 2, Y: config.Height - 2}}
+				p.Direction = Point{X: -1, Y: 0}
+				p.LastMoveDir = Point{X: -1, Y: 0}
+				if !g.IsPVP {
+					g.SetMessage("🤖 AI 竞争者撞墙了！")
+				}
+			}
+		}
+		return
+	}
+
+	// Move snake
+	p.Snake = append([]Point{newHead}, p.Snake...)
+
+	// Food collision
+	ate := g.handleFoodCollision(newHead, p, idx == 0)
+	if !ate {
+		p.Snake = p.Snake[:len(p.Snake)-1]
+	}
 }
 
 // CheckTimeLimit checks if the game time has expired
@@ -172,16 +236,24 @@ func (g *Game) CheckTimeLimit() {
 
 	remaining := g.GetTimeRemaining()
 	if remaining <= 0 {
+		log.Printf("[Game] Time Limit Reached (IsPVP: %v)", g.IsPVP)
+		log.Printf("[Game] TIME LIMIT EXPIRED! Duration: %v, Elapsed: %v, Remaining: %d", config.GameDuration, time.Since(g.StartTime), remaining)
 		g.GameOver = true
 		g.EndTime = time.Now()
 
 		// Determine winner
-		if g.Score > g.AIScore {
-			g.Winner = "player"
-		} else if g.AIScore > g.Score {
-			g.Winner = "ai"
+		if len(g.Players) >= 2 {
+			s1 := g.Players[0].Score
+			s2 := g.Players[1].Score
+			if s1 > s2 {
+				g.Winner = "player"
+			} else if s2 > s1 {
+				g.Winner = "ai"
+			} else {
+				g.Winner = "draw"
+			}
 		} else {
-			g.Winner = "draw"
+			g.Winner = "none"
 		}
 	}
 }
@@ -190,9 +262,6 @@ func (g *Game) CheckTimeLimit() {
 func (g *Game) GetTimeRemaining() int {
 	if !g.TimerStarted {
 		return int(config.GameDuration.Seconds())
-	}
-	if g.GameOver && g.Winner != "" {
-		return 0
 	}
 	endTime := time.Now()
 	if g.GameOver {
@@ -206,72 +275,17 @@ func (g *Game) GetTimeRemaining() int {
 	return int(remaining.Seconds())
 }
 
-// UpdateAISnake advances the AI competitor snake state
-func (g *Game) UpdateAISnake() {
-	if g.Mode == "zen" || g.GameOver || g.Paused {
-		return
-	}
-
-	// Update stun status
-	g.AIStunned = time.Now().Before(g.AIStunnedUntil)
-	if g.AIStunned {
-		return // Skip movement if stunned
-	}
-
-	g.CheckTimeLimit()
-	if g.GameOver {
-		return
-	}
-
-	// Decision logic (decide direction and boosting status)
-	g.UpdateCompetitorAI()
-
-	// Move exactly once per update call for visual smoothness
-	g.moveAISnakeOnce()
-}
-
-// moveAISnakeOnce performs a single step for AI
-func (g *Game) moveAISnakeOnce() {
-	if len(g.AISnake) == 0 {
-		return
-	}
-
-	head := g.AISnake[0]
-	newHead := Point{X: head.X + g.AIDirection.X, Y: head.Y + g.AIDirection.Y}
-
-	// Collision check for AI
-	if g.checkCollision(newHead) {
-		g.AISnake = []Point{{X: config.Width - 2, Y: config.Height - 2}}
-		g.AIDirection = Point{X: -1, Y: 0}
-		g.AILastDir = Point{X: -1, Y: 0}
-		g.SetMessage("🤖 AI 竞争者撞墙了！")
-		return
-	}
-
-	g.AISnake = append([]Point{newHead}, g.AISnake...)
-	dummyEaten := 0
-	ate := g.handleFoodCollision(newHead, &g.AIScore, &dummyEaten, false)
-	if !ate {
-		g.AISnake = g.AISnake[:len(g.AISnake)-1]
-	}
-	g.AILastDir = g.AIDirection
-}
-
 func (g *Game) checkCollision(p Point) bool {
 	// Wall
 	if p.X <= 0 || p.X >= config.Width-1 || p.Y <= 0 || p.Y >= config.Height-1 {
 		return true
 	}
-	// Player Body
-	for _, s := range g.Snake {
-		if s == p {
-			return true
-		}
-	}
-	// AI Body
-	for _, s := range g.AISnake {
-		if s == p {
-			return true
+	// All Players
+	for _, player := range g.Players {
+		for _, s := range player.Snake {
+			if s == p {
+				return true
+			}
 		}
 	}
 	// Obstacles
@@ -285,19 +299,19 @@ func (g *Game) checkCollision(p Point) bool {
 	return false
 }
 
-func (g *Game) handleFoodCollision(pos Point, score *int, eaten *int, isPlayer bool) bool {
+func (g *Game) handleFoodCollision(pos Point, p *Player, isP1 bool) bool {
 	for i, food := range g.Foods {
 		if pos == food.Pos {
 			totalScore := food.GetTotalScore(config.Width, config.Height)
-			*score += totalScore
-			*eaten++
+			p.Score += totalScore
+			p.FoodEaten++
 
-			if isPlayer {
+			if isP1 {
 				bonusMsg := food.GetBonusMessage(config.Width, config.Height)
 				if bonusMsg != "" {
 					g.SetMessageWithType(bonusMsg, "bonus")
 				}
-				// Record score event for player
+				// Record score event
 				g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
 					Pos:    pos,
 					Amount: totalScore,
@@ -325,14 +339,49 @@ func (g *Game) TogglePause() {
 	g.Paused = !g.Paused
 }
 
-// ToggleAutoPlay toggles the AI auto-play mode
-func (g *Game) ToggleAutoPlay() {
-	g.AutoPlay = !g.AutoPlay
-	if g.AutoPlay {
-		g.SetMessage("🤖 自动模式已开启")
+// TogglePlayerAutoPlay toggles the AI auto-play mode for a specific player
+func (g *Game) TogglePlayerAutoPlay(idx int, requestedMode string) {
+	if idx >= len(g.Players) {
+		return
+	}
+	p := g.Players[idx]
+
+	// If it's currently manual or we want to change the agent type while running
+	isSwitchingModes := p.Controller != "manual" && requestedMode != "" && p.Controller != requestedMode
+
+	if p.Controller == "manual" || isSwitchingModes {
+		modeToUse := requestedMode
+		if modeToUse == "" {
+			if g.NeuralNet != nil {
+				modeToUse = "neural"
+			} else {
+				modeToUse = "heuristic"
+			}
+		}
+
+		if modeToUse == "neural" && g.NeuralNet != nil {
+			p.Brain = &NeuralController{}
+			p.Controller = "neural"
+			g.SetMessage(p.Name + ": 🧠 神经网络模型已注入")
+			log.Printf("[Game] Player %d (%s) switched to NEURAL controller", idx, p.Name)
+		} else {
+			p.Brain = &HeuristicController{}
+			p.Controller = "heuristic"
+			g.SetMessage(p.Name + ": 📏 启发式规则控制器已注入")
+			log.Printf("[Game] Player %d (%s) switched to HEURISTIC controller", idx, p.Name)
+		}
 	} else {
-		g.SetMessage("👤 手动模式已恢复")
-		g.Boosting = false
+		// Switch back to manual
+		p.Brain = &ManualController{}
+		p.Controller = "manual"
+		p.Boosting = false
+		g.SetMessage(p.Name + ": 👤 已恢复手动模式")
+		log.Printf("[Game] Player %d (%s) switched to MANUAL controller", idx, p.Name)
+	}
+
+	// Legacy flag for backward compatibility
+	if idx == 0 {
+		g.AutoPlay = (p.Controller != "manual")
 	}
 }
 
@@ -346,9 +395,13 @@ func (g *Game) ToggleBerserkerMode() {
 	}
 }
 
-// GetMoveInterval (Player only)
+// GetMoveInterval (P1 only)
 func (g *Game) GetMoveInterval(difficulty string) time.Duration {
-	return g.GetMoveIntervalExt(difficulty, g.Boosting)
+	boosted := false
+	if len(g.Players) > 0 {
+		boosted = g.Players[0].Boosting
+	}
+	return g.GetMoveIntervalExt(difficulty, boosted)
 }
 
 func (g *Game) GetMoveIntervalExt(difficulty string, boosted bool) time.Duration {
@@ -373,23 +426,30 @@ func (g *Game) GetMoveIntervalExt(difficulty string, boosted bool) time.Duration
 	return time.Duration(ticks) * config.BaseTick
 }
 
-// GetAIMoveInterval (AI always mid speed unless boosting)
+// GetAIMoveInterval (AI defaults to mid speed unless boosting)
 func (g *Game) GetAIMoveInterval() time.Duration {
-	return g.GetMoveIntervalExt("mid", g.AIBoosting)
+	boosted := false
+	if len(g.Players) > 1 {
+		boosted = g.Players[1].Boosting
+	}
+	return g.GetMoveIntervalExt("mid", boosted)
 }
 
-// ToggleBoost allows manual control of the boosting state
-func (g *Game) ToggleBoost(active bool) {
-	g.Boosting = active
-}
-
-// SetDirection sets the player snake direction
+// SetDirection sets the direction for Player 1
 func (g *Game) SetDirection(newDir Point) bool {
-	// Determine the base of comparison: use LastMoveDir if it exists, otherwise g.Direction
-	// (LastMoveDir is empty before the very first move)
-	compareDir := g.LastMoveDir
+	return g.SetPlayerDirection(0, newDir)
+}
+
+// SetPlayerDirection sets the direction for a specific player
+func (g *Game) SetPlayerDirection(idx int, newDir Point) bool {
+	if idx >= len(g.Players) {
+		return false
+	}
+	p := g.Players[idx]
+
+	compareDir := p.LastMoveDir
 	if compareDir.X == 0 && compareDir.Y == 0 {
-		compareDir = g.Direction
+		compareDir = p.Direction
 	}
 
 	if newDir.X != 0 && compareDir.X == -newDir.X {
@@ -399,22 +459,25 @@ func (g *Game) SetDirection(newDir Point) bool {
 		return false
 	}
 
-	if g.Direction != newDir {
-		g.Direction = newDir
+	if p.Direction != newDir {
+		p.Direction = newDir
 		return true
 	}
 	return false
 }
 
-// GetEatingSpeed calculates player foods eaten per second
+// GetEatingSpeed calculates P1 foods eaten per second
 func (g *Game) GetEatingSpeed() float64 {
+	if len(g.Players) == 0 {
+		return 0
+	}
 	endTime := time.Now()
 	if g.GameOver {
 		endTime = g.EndTime
 	}
 	elapsed := endTime.Sub(g.StartTime) - g.GetTotalPausedTime()
 	if elapsed.Seconds() > 0 {
-		return float64(g.FoodEaten) / elapsed.Seconds()
+		return float64(g.Players[0].FoodEaten) / elapsed.Seconds()
 	}
 	return 0
 }
@@ -422,7 +485,7 @@ func (g *Game) GetEatingSpeed() float64 {
 // GetTotalPausedTime returns total paused time
 func (g *Game) GetTotalPausedTime() time.Duration {
 	totalPaused := g.PausedTime
-	if g.Paused {
+	if g.Paused && !g.PauseStart.IsZero() {
 		endTime := time.Now()
 		if g.GameOver {
 			endTime = g.EndTime
@@ -516,14 +579,11 @@ func (g *Game) isCellEmpty(p Point) bool {
 	if p.X <= 0 || p.X >= config.Width-1 || p.Y <= 0 || p.Y >= config.Height-1 {
 		return false
 	}
-	for _, s := range g.Snake {
-		if s == p {
-			return false
-		}
-	}
-	for _, s := range g.AISnake {
-		if s == p {
-			return false
+	for _, player := range g.Players {
+		for _, s := range player.Snake {
+			if s == p {
+				return false
+			}
 		}
 	}
 	for _, f := range g.Foods {
@@ -541,44 +601,37 @@ func (g *Game) isCellEmpty(p Point) bool {
 	return true
 }
 
-// Fire allows the player to shoot a fireball
+// Fire allows Player 1 to shoot a fireball
 func (g *Game) Fire() {
-	g.FireByType("player")
+	g.FireByTypeIdx(0)
 }
 
-// FireByType allows specific owner to shoot a fireball
-func (g *Game) FireByType(owner string) {
-	if g.GameOver || g.Paused {
+func (g *Game) FireByTypeIdx(idx int) {
+	if g.GameOver || g.Paused || idx >= len(g.Players) {
+		return
+	}
+	p := g.Players[idx]
+	if p.Stunned || len(p.Snake) == 0 {
 		return
 	}
 
-	var lastFire *time.Time
-	var head Point
-	var dir Point
-
-	if owner == "player" {
-		lastFire = &g.LastFireTime
-		if len(g.Snake) == 0 {
-			return
-		}
-		head = g.Snake[0]
-		dir = g.Direction
-	} else {
-		lastFire = &g.AILastFireTime
-		if len(g.AISnake) == 0 || g.AIStunned {
-			return
-		}
-		head = g.AISnake[0]
-		dir = g.AIDirection
-	}
-
-	if time.Since(*lastFire) < config.FireballCooldown {
+	if time.Since(p.LastFireTime) < config.FireballCooldown {
 		return
 	}
 
-	fb := &Fireball{Pos: head, Dir: dir, SpawnTime: time.Now(), Owner: owner}
+	owner := "player"
+	if idx > 0 {
+		owner = "ai" // Map P2+ to "ai" for frontend compatibility
+	}
+
+	fb := &Fireball{
+		Pos:       p.Snake[0],
+		Dir:       p.Direction,
+		SpawnTime: time.Now(),
+		Owner:     owner,
+	}
 	g.Fireballs = append(g.Fireballs, fb)
-	*lastFire = time.Now()
+	p.LastFireTime = time.Now()
 }
 
 // UpdateFireballs
@@ -592,89 +645,82 @@ func (g *Game) UpdateFireballs() {
 		fb.Pos.X += fb.Dir.X
 		fb.Pos.Y += fb.Dir.Y
 		hit := false
+
+		// Wall collision
 		if fb.Pos.X <= 0 || fb.Pos.X >= config.Width-1 || fb.Pos.Y <= 0 || fb.Pos.Y >= config.Height-1 {
 			hit = true
 			g.HitPoints = append(g.HitPoints, fb.Pos)
 		}
+
 		if !hit {
-			for i, p := range g.Snake {
-				if p == fb.Pos {
-					if fb.Owner == "player" && i == 0 {
-						continue // Don't hit own head when firing
-					}
-					hit = true
-					g.HitPoints = append(g.HitPoints, fb.Pos)
-					if fb.Owner == "ai" {
-						if i == 0 {
-							// Hit player head: heavy penalty + Stun
-							g.Score = max(0, g.Score-30)
-							g.PlayerStunnedUntil = time.Now().Add(1500 * time.Millisecond)
-							g.SetMessageWithType("⚠️ 警报！你被 AI 爆头眩晕了！", "important")
-							g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
-								Pos:    fb.Pos,
-								Amount: -30,
-								Label:  "💔 HEADSHOT -30",
-							})
-						} else {
-							// Hit player body: loss of score + short stun + shrink
-							g.Score = max(0, g.Score-10)
-							g.PlayerStunnedUntil = time.Now().Add(500 * time.Millisecond)
-							// Shrink player (as long as they have some length)
-							if len(g.Snake) > 2 {
-								g.Snake = g.Snake[:len(g.Snake)-1]
-							}
-							g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
-								Pos:    fb.Pos,
-								Amount: -10,
-								Label:  "🔥 HIT -10",
-							})
+			// Check collision with all players
+			for pIdx, player := range g.Players {
+				for i, p := range player.Snake {
+					if p == fb.Pos {
+						// Don't hit own head when firing
+						ownerIdx := 0
+						if fb.Owner == "ai" {
+							ownerIdx = 1
 						}
-					}
-					break
-				}
-			}
-		}
-		if !hit {
-			for i, p := range g.AISnake {
-				if p == fb.Pos {
-					if fb.Owner == "ai" && i == 0 {
-						continue // Don't hit own head if we allow AI to fire later
-					}
-					hit = true
-					g.HitPoints = append(g.HitPoints, fb.Pos)
-					// Protection: if AI is already stunned, hitting it again has no effect
-					if time.Now().Before(g.AIStunnedUntil) {
+						if pIdx == ownerIdx && i == 0 {
+							continue
+						}
+
+						hit = true
+						g.HitPoints = append(g.HitPoints, fb.Pos)
+
+						// Hit logic refined
+						targetPlayer := player
+
+						// Determine attacker
+						attackerIdx := 0
+						if fb.Owner == "ai" {
+							attackerIdx = 1
+						}
+
+						var attackerScore int
+						var label string
+
+						if i == 0 {
+							// HEADSHOT: +50 to attacker, 2s stun to victim
+							attackerScore = 50
+							label = "🎯 HEADSHOT +50"
+							targetPlayer.StunnedUntil = time.Now().Add(2 * time.Second)
+							if pIdx == 0 {
+								g.SetMessageWithType("😱 警告！头部被击中，麻痹2秒！", "important")
+							}
+						} else {
+							// BODY HIT: +10 to attacker, shorten body
+							attackerScore = 10
+							label = "🔥 HIT +10"
+							// Shorten body (remove last 1 segment if possible)
+							segmentsToRemove := 1
+							if len(targetPlayer.Snake) > segmentsToRemove+1 {
+								targetPlayer.Snake = targetPlayer.Snake[:len(targetPlayer.Snake)-segmentsToRemove]
+							}
+						}
+
+						// Award score to attacker
+						if attackerIdx < len(g.Players) {
+							g.Players[attackerIdx].Score += attackerScore
+						}
+
+						g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
+							Pos:    fb.Pos,
+							Amount: attackerScore,
+							Label:  label,
+						})
 						break
 					}
-					if i == 0 {
-						// Hit head: Stun for 2 seconds
-						g.AIStunnedUntil = time.Now().Add(2 * time.Second)
-						g.Score += 50
-						g.SetMessage("🎯 爆头！AI 被眩晕了！")
-						g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
-							Pos:    fb.Pos,
-							Amount: 50,
-							Label:  "🎯 HEADSHOT +50",
-						})
-					} else {
-						// Hit body: Remove segments and some score
-						g.Score += 20
-						// Shrink AI: remove 1 segment
-						if len(g.AISnake) > 1 {
-							g.AISnake = g.AISnake[:len(g.AISnake)-1]
-						}
-						// Removed middle message for body hits to keep UI cleaner
-						g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
-							Pos:    fb.Pos,
-							Amount: 20,
-							Label:  "🔥 HIT +20",
-						})
-					}
+				}
+				if hit {
 					break
 				}
 			}
 		}
+
 		if !hit {
+			// Obstacle collision
 			for i := range g.Obstacles {
 				obs := &g.Obstacles[i]
 				for j, p := range obs.Points {
@@ -682,7 +728,16 @@ func (g *Game) UpdateFireballs() {
 						obs.Points = append(obs.Points[:j], obs.Points[j+1:]...)
 						hit = true
 						g.HitPoints = append(g.HitPoints, fb.Pos)
-						g.Score += 10
+
+						// Add score (+10) to fireball owner for destroying obstacle
+						ownerIdx := 0
+						if fb.Owner == "ai" {
+							ownerIdx = 1
+						}
+						if ownerIdx < len(g.Players) {
+							g.Players[ownerIdx].Score += 10
+						}
+
 						g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
 							Pos:    fb.Pos,
 							Amount: 10,
@@ -716,15 +771,11 @@ func (g *Game) GetGameStateSnapshot(started bool, serverBoosting bool, difficult
 	}
 
 	state := GameState{
-		Snake:         g.Snake,
 		Foods:         foods,
-		Score:         g.Score,
-		FoodEaten:     g.FoodEaten,
 		EatingSpeed:   g.GetEatingSpeed(),
 		Started:       started,
 		GameOver:      g.GameOver,
 		Paused:        g.Paused,
-		Boosting:      g.Boosting || serverBoosting,
 		AutoPlay:      g.AutoPlay,
 		Difficulty:    difficulty,
 		Message:       g.GetMessage(),
@@ -732,15 +783,32 @@ func (g *Game) GetGameStateSnapshot(started bool, serverBoosting bool, difficult
 		Obstacles:     g.Obstacles,
 		Fireballs:     g.Fireballs,
 		HitPoints:     g.HitPoints,
-		AISnake:       g.AISnake,
-		AIScore:       g.AIScore,
 		TimeRemaining: g.GetTimeRemaining(),
 		Winner:        g.Winner,
-		AIStunned:     time.Now().Before(g.AIStunnedUntil),
-		PlayerStunned: time.Now().Before(g.PlayerStunnedUntil),
 		Mode:          g.Mode,
 		ScoreEvents:   g.ScoreEvents,
 		Berserker:     g.BerserkerMode,
+		IsPVP:         g.IsPVP,
+	}
+
+	// Populate P1 fields
+	if len(g.Players) > 0 {
+		p1 := g.Players[0]
+		state.Snake = p1.Snake
+		state.Score = p1.Score
+		state.FoodEaten = p1.FoodEaten
+		state.Boosting = p1.Boosting || serverBoosting
+		state.PlayerStunned = time.Now().Before(p1.StunnedUntil)
+		state.P1Name = p1.Name
+	}
+
+	// Populate P2 Fields (compatible with older AISnake frontend keys)
+	if len(g.Players) > 1 {
+		p2 := g.Players[1]
+		state.AISnake = p2.Snake
+		state.AIScore = p2.Score
+		state.AIStunned = time.Now().Before(p2.StunnedUntil)
+		state.P2Name = p2.Name
 	}
 
 	if g.GameOver {

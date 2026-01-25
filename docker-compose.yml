@@ -1,0 +1,15 @@
+services:
+  snake-game:
+    build: .
+    container_name: snake-game
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./game.db:/app/game.db
+      - ./leaderboard.json:/app/leaderboard.json
+      - ./users.json:/app/users.json
+    restart: always
+    environment:
+      - DETAILED_LOGS=true
+    command: ["./webserver", "--detailed-logs"]

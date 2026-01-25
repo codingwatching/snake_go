@@ -1,83 +1,17 @@
 package game
 
 import (
-	"fmt"
 	"math/rand"
 
 	"github.com/trytobebee/snake_go/pkg/config"
 )
 
 // UpdateAI decides the next move for the player snake when in AutoPlay mode
-func (g *Game) UpdateAI() {
-	if !g.AutoPlay || g.GameOver || g.Paused {
-		return
-	}
-
-	// 1. Priority: Use Neural Net Brain if available
-	nnSuccess := false
-	if g.NeuralNet != nil {
-		input := g.GetFeatureGrid()
-		logits := Predict(input)
-
-		bestIdx := 0
-		var maxVal float32 = -1e9
-		for i, v := range logits {
-			if v > maxVal {
-				maxVal = v
-				bestIdx = i
-			}
-		}
-
-		var newDir Point
-		switch bestIdx {
-		case 0:
-			newDir = Point{X: 0, Y: -1}
-		case 1:
-			newDir = Point{X: 0, Y: 1}
-		case 2:
-			newDir = Point{X: -1, Y: 0}
-		case 3:
-			newDir = Point{X: 1, Y: 0}
-		}
-
-		if g.SetDirection(newDir) {
-			nextHead := Point{X: g.Snake[0].X + newDir.X, Y: g.Snake[0].Y + newDir.Y}
-			if g.isSafe(nextHead) {
-				g.CurrentAIContext = AIContext{Intent: IntentHunt, Urgency: 0.5}
-				nnSuccess = true
-			} else {
-				fmt.Println("🤖 NN suggested suicide, falling back to Heuristic AI...")
-			}
-		}
-	}
-
-	var ctx AIContext
-	// 2. Fallback: Heuristic AI (only if NN failed or not available)
-	if !nnSuccess {
-		var newDir Point
-		var boosting bool
-		newDir, boosting, ctx = g.CalculateBestMove(g.Snake, g.LastMoveDir)
-		g.Boosting = boosting
-		g.SetDirection(newDir)
-	} else {
-		// Even if NN set the direction, we still use Heuristic to decide on boosting and situational context
-		_, boosting, hCtx := g.CalculateBestMove(g.Snake, g.LastMoveDir)
-		g.Boosting = boosting
-		ctx = hCtx
-		ctx.Intent = IntentHunt // Keep NN intent primary
-	}
-
-	// 3. Final Actions: Fireball logic (Always run)
-	didFire := g.handleAIFire(g.Snake[0], g.Direction, "player")
-	if didFire {
-		ctx.Intent = IntentAttack
-	}
-	g.CurrentAIContext = ctx
-}
+// --- Obsolete functions removed (logic moved to Controller) ---
 
 // GetFeatureGrid generates the 6-channel input for the Neural Network
 // Channels: 0:PlayerHead, 1:PlayerBody, 2:EnemyHead, 3:EnemyBody, 4:Food, 5:Hazard
-func (g *Game) GetFeatureGrid() []float64 {
+func (g *Game) GetFeatureGrid(playerIdx int) []float64 {
 	W, H := config.Width, config.Height // 25x25
 	size := W * H
 	grid := make([]float64, 6*size)
@@ -88,25 +22,37 @@ func (g *Game) GetFeatureGrid() []float64 {
 		}
 	}
 
+	if playerIdx >= len(g.Players) {
+		return grid
+	}
+
+	me := g.Players[playerIdx]
+
 	// Ch 0: Player Head
-	if len(g.Snake) > 0 {
-		set(0, g.Snake[0].X, g.Snake[0].Y)
+	if len(me.Snake) > 0 {
+		set(0, me.Snake[0].X, me.Snake[0].Y)
 	}
 	// Ch 1: Player Body
-	if len(g.Snake) > 1 {
-		for _, p := range g.Snake[1:] {
+	if len(me.Snake) > 1 {
+		for _, p := range me.Snake[1:] {
 			set(1, p.X, p.Y)
 		}
 	}
 
-	// Ch 2: AI Head
-	if len(g.AISnake) > 0 {
-		set(2, g.AISnake[0].X, g.AISnake[0].Y)
-	}
-	// Ch 3: AI Body
-	if len(g.AISnake) > 1 {
-		for _, p := range g.AISnake[1:] {
-			set(3, p.X, p.Y)
+	// Iterate over other players as enemies
+	for i, other := range g.Players {
+		if i == playerIdx {
+			continue
+		}
+		// Ch 2: Enemy Head
+		if len(other.Snake) > 0 {
+			set(2, other.Snake[0].X, other.Snake[0].Y)
+		}
+		// Ch 3: Enemy Body
+		if len(other.Snake) > 1 {
+			for _, p := range other.Snake[1:] {
+				set(3, p.X, p.Y)
+			}
 		}
 	}
 
@@ -128,18 +74,18 @@ func (g *Game) GetFeatureGrid() []float64 {
 	return grid
 }
 
-// UpdateCompetitorAI decides the next move for the AI competitor
-func (g *Game) UpdateCompetitorAI() {
-	if g.GameOver || g.Paused {
+// UpdateCompetitorAI decides the next move for the AI competitor (p2)
+func (g *Game) UpdateCompetitorAI(p *Player) {
+	if g.GameOver || g.Paused || p == nil {
 		return
 	}
 
-	newDir, boosting, _ := g.CalculateBestMove(g.AISnake, g.AILastDir)
+	newDir, boosting, _ := g.CalculateBestMove(p.Snake, p.LastMoveDir)
 
 	// Aggressive AI logic (only in Berserker Mode):
 	// AI boosts if it's far from its target OR if it wants to race the player
-	if g.BerserkerMode && !boosting && len(g.AISnake) > 0 {
-		head := g.AISnake[0]
+	if g.BerserkerMode && !boosting && len(p.Snake) > 0 {
+		head := p.Snake[0]
 
 		// Find closest food to evaluate distance
 		closestDist := 1000
@@ -150,11 +96,15 @@ func (g *Game) UpdateCompetitorAI() {
 			}
 
 			// If player is also close to this food, boost to compete!
-			if len(g.Snake) > 0 {
-				playerDist := abs(f.Pos.X-g.Snake[0].X) + abs(f.Pos.Y-g.Snake[0].Y)
-				if d < 8 && playerDist < 8 {
-					boosting = true
-					break
+			if len(g.Players) > 1 {
+				// AI is usually p2, so p1 is g.Players[0]
+				p1 := g.Players[0]
+				if len(p1.Snake) > 0 {
+					playerDist := abs(f.Pos.X-p1.Snake[0].X) + abs(f.Pos.Y-p1.Snake[0].Y)
+					if d < 8 && playerDist < 8 {
+						boosting = true
+						break
+					}
 				}
 			}
 		}
@@ -165,26 +115,28 @@ func (g *Game) UpdateCompetitorAI() {
 		}
 	}
 
-	g.AIBoosting = boosting
+	p.Boosting = boosting
 
-	// Set AI direction (bypass SetDirection validation which is for player)
+	// Set AI direction (bypass SetDirection validation which is for player1)
 	if newDir.X != 0 || newDir.Y != 0 {
-		g.AIDirection = newDir
+		p.Direction = newDir
 	}
 
 	// Fireball logic for AI competitor
-	if len(g.AISnake) > 0 {
+	if len(p.Snake) > 0 {
 		if g.BerserkerMode {
-			g.handleAIFire(g.AISnake[0], g.AIDirection, "ai")
+			g.handleAIFire(p, 1)
 		} else {
 			// Normal AI only clears obstacles, doesn't shoot at player
-			g.handleNormalAIFire(g.AISnake[0], g.AIDirection)
+			g.handleNormalAIFire(p)
 		}
 	}
 }
 
 // handleNormalAIFire only shoots at obstacles, not players
-func (g *Game) handleNormalAIFire(head Point, dir Point) {
+func (g *Game) handleNormalAIFire(p *Player) {
+	head := p.Snake[0]
+	dir := p.Direction
 	for dist := 1; dist <= 5; dist++ {
 		lookAhead := Point{X: head.X + dir.X*dist, Y: head.Y + dir.Y*dist}
 		if lookAhead.X <= 0 || lookAhead.X >= config.Width-1 || lookAhead.Y <= 0 || lookAhead.Y >= config.Height-1 {
@@ -205,7 +157,7 @@ func (g *Game) handleNormalAIFire(head Point, dir Point) {
 		}
 
 		if isObstacle {
-			g.FireByType("ai")
+			g.FireByTypeIdx(1) // P2 (AI)
 			break
 		}
 
@@ -362,7 +314,9 @@ func (g *Game) CalculateBestMove(snake []Point, lastMoveDir Point) (Point, bool,
 	return bestDir, shouldBoost, ctx
 }
 
-func (g *Game) handleAIFire(head Point, dir Point, owner string) bool {
+func (g *Game) handleAIFire(p *Player, ownerIdx int) bool {
+	head := p.Snake[0]
+	dir := p.Direction
 	// Look further for targets (up to 10 tiles)
 	for dist := 1; dist <= 10; dist++ {
 		lookAhead := Point{X: head.X + dir.X*dist, Y: head.Y + dir.Y*dist}
@@ -386,26 +340,23 @@ func (g *Game) handleAIFire(head Point, dir Point, owner string) bool {
 
 		// Check for enemy snakes
 		isTarget := false
-		if owner == "ai" {
-			// AI targets player
-			for _, s := range g.Snake {
+		for i, other := range g.Players {
+			if i == ownerIdx {
+				continue
+			}
+			for _, s := range other.Snake {
 				if s == lookAhead {
 					isTarget = true
 					break
 				}
 			}
-		} else {
-			// Player AI targets AI competitor
-			for _, s := range g.AISnake {
-				if s == lookAhead {
-					isTarget = true
-					break
-				}
+			if isTarget {
+				break
 			}
 		}
 
 		if isObstacle || isTarget {
-			g.FireByType(owner)
+			g.FireByTypeIdx(ownerIdx)
 			return true
 		}
 
@@ -433,11 +384,10 @@ func (g *Game) countReachableSpace(start Point) int {
 
 	// Create a temporary "occupied" map for faster lookups
 	occupied := make(map[Point]bool)
-	for _, p := range g.Snake {
-		occupied[p] = true
-	}
-	for _, p := range g.AISnake {
-		occupied[p] = true
+	for _, p := range g.Players {
+		for _, pos := range p.Snake {
+			occupied[pos] = true
+		}
 	}
 
 	for len(queue) > 0 {
@@ -460,11 +410,11 @@ func (g *Game) countReachableSpace(start Point) int {
 			if occupied[next] {
 				// Simple check: ignore tail positions if they might move
 				isTail := false
-				if len(g.Snake) > 0 && next == g.Snake[len(g.Snake)-1] {
-					isTail = true
-				}
-				if len(g.AISnake) > 0 && next == g.AISnake[len(g.AISnake)-1] {
-					isTail = true
+				for _, p := range g.Players {
+					if len(p.Snake) > 0 && next == p.Snake[len(p.Snake)-1] {
+						isTail = true
+						break
+					}
 				}
 				if !isTail {
 					continue
@@ -503,14 +453,11 @@ func (g *Game) isSafe(p Point) bool {
 		return false
 	}
 
-	for _, s := range g.Snake {
-		if s == p {
-			return false
-		}
-	}
-	for _, s := range g.AISnake {
-		if s == p {
-			return false
+	for _, player := range g.Players {
+		for _, s := range player.Snake {
+			if s == p {
+				return false
+			}
 		}
 	}
 

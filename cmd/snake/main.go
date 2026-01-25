@@ -50,21 +50,20 @@ func main() {
 	checkBoostKey := func(inputDir game.Point) {
 		now := time.Now()
 
-		// Check if same direction pressed consecutively
 		if inputDir == lastDirKeyDir && time.Since(lastDirKeyTime) < config.KeyRepeatWindow {
 			consecutiveKeyCount++
 		} else {
-			// Direction changed or gap too long, reset counter
 			consecutiveKeyCount = 1
 		}
 
 		lastDirKeyDir = inputDir
 		lastDirKeyTime = now
 
-		// Trigger boost if threshold reached and same as current direction
-		if consecutiveKeyCount >= config.BoostThreshold && inputDir == g.Direction {
-			boosting = true
-			lastBoostKeyTime = now
+		if len(g.Players) > 0 {
+			if consecutiveKeyCount >= config.BoostThreshold && inputDir == g.Players[0].Direction {
+				boosting = true
+				lastBoostKeyTime = now
+			}
 		}
 	}
 
@@ -75,13 +74,11 @@ func main() {
 	for {
 		select {
 		case inputEvent := <-inputChan:
-			// Handle quit
 			if input.IsQuit(inputEvent) {
 				fmt.Println("\n  Thanks for playing! 👋")
 				return
 			}
 
-			// Handle restart
 			if input.IsRestart(inputEvent) {
 				if g.GameOver {
 					g = game.NewGame()
@@ -91,7 +88,6 @@ func main() {
 				}
 			}
 
-			// Handle pause
 			if input.IsPause(inputEvent) {
 				if !g.GameOver {
 					g.TogglePause()
@@ -99,31 +95,29 @@ func main() {
 				}
 			}
 
-			// Handle direction input
 			if inputDir, isValid := input.ParseDirection(inputEvent); isValid {
 				dirChanged := g.SetDirection(inputDir)
 
 				if dirChanged {
-					// Direction changed, reset boost
 					consecutiveKeyCount = 1
 					lastDirKeyDir = inputDir
 					lastDirKeyTime = time.Now()
 					boosting = false
 				} else {
-					// Same direction, check for boost
 					checkBoostKey(inputDir)
 				}
 			}
 
 		case <-ticker.C:
-			// Check boost timeout
 			if boosting && time.Since(lastBoostKeyTime) > config.BoostTimeout {
 				boosting = false
 			}
 
-			tickCount++
+			if len(g.Players) > 0 {
+				g.Players[0].Boosting = boosting
+			}
 
-			// Determine update frequency based on boost
+			tickCount++
 			ticksNeeded := config.NormalTicksPerUpdate
 			if boosting {
 				ticksNeeded = config.BoostTicksPerUpdate
@@ -132,23 +126,28 @@ func main() {
 			if tickCount >= ticksNeeded {
 				tickCount = 0
 				if !g.GameOver && !g.Paused {
-					g.Update()
+					g.UpdatePlayer(0)
+					g.TrySpawnFood()
+					g.TrySpawnObstacle()
+					g.CheckTimeLimit()
 				}
 				render.Render(g, boosting)
 			}
 
 			// AI Tick
-			aiTickCount++
-			aiTicksNeeded := 13
-			if g.AIBoosting {
-				aiTicksNeeded = 4
-			}
-			if aiTickCount >= aiTicksNeeded {
-				aiTickCount = 0
-				if !g.GameOver && !g.Paused {
-					g.UpdateAISnake()
+			if len(g.Players) > 1 {
+				aiTickCount++
+				aiTicksNeeded := 13
+				if g.Players[1].Boosting {
+					aiTicksNeeded = 4
 				}
-				render.Render(g, boosting)
+				if aiTickCount >= aiTicksNeeded {
+					aiTickCount = 0
+					if !g.GameOver && !g.Paused {
+						g.UpdatePlayer(1)
+					}
+					render.Render(g, boosting)
+				}
 			}
 		}
 	}

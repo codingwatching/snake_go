@@ -8,21 +8,16 @@ A modern Snake game written in Go, featuring both **Terminal** and **Web** versi
 
 ## ✨ Features
 
-- 🌐 **Dual Mode**: Terminal CLI and Web Browser versions
-- 🧠 **Deep Learning AI**: Neural-network driven decision making for **Auto-Play mode**
-- 🎮 **New Game Modes**: **Zen** (Infinite practice) and **Battle** (AI competition)
-- ✨ **Floating Score Effects**: Animated score bubbles with glass-morphic design
-- 🔥 **Fireball Combat System**: Shoot fireballs to destroy obstacles and stun AI
-- 🐍 **AI Competitive Snake**: Battle against an intelligent, heuristic-driven AI rival
-- 🚀 **High-Performance Inference**: Global task queue with <2ms latency
-- 🔊 **Dynamic Sound Effects** (Web Audio synthesized)
-- 📳 **Haptic Feedback** for mobile devices
-- ⚡ **Boost Mode**: Hold direction key for 3x speed
-- 🍎 **Multi-Type Food System** with different scores and expiry times
-- 📊 **Real-time Statistics** (score, eating speed, food count)
-- 📱 **Mobile-Friendly** web interface with touch controls
-- 💾 **High Score Persistence** (localStorage for web)
+- 🌐 **Online Multiplayer**: Real-time **P2P Battle** with matchmaking and shared game state
+- 🧠 **Multi-Brain AI**: Choose between **Neural-RL** and **Heuristic** agents for Auto-Play
+- 🏗️ **Modular Architecture**: Decoupled "Brain" (Controller) system for human/AI interchangeability
+- ⚔️ **Advanced Combat**: Persistent scoring with **+50 headshots**, stuns, and body shortening
+- 🎮 **Three Modes**: **Zen** (Practice), **Battle** (vs AI), and **P2P Battle** (vs Humans)
+- 💾 **SQLite Persistence**: Robust tracking for accounts, match history, and leaderboards
+- 🚀 **Docker Ready**: One-click deployment with `docker-compose`
 - 📼 **Session Recording**: Full JSONL-based game capture for ML training
+- ⚡ **Boost Mode**: Hold direction key for 3x speed boost
+- 📳 **Haptic Feedback** & synthesized sound effects
 
 ## 📚 Documentation
 
@@ -49,6 +44,7 @@ Detailed documentation on features and architecture can be found in the [docs/](
 ### New Game Modes 🎮
 - **🧘 Zen Mode**: No time limit, no AI opponent. Perfect for practicing controls, exploring the multi-food system, and enjoying a relaxed experience.
 - **⚔️ Battle Mode**: Compete against an AI snake within a 30-second time limit. Includes combat mechanics (stun AI with fireballs!).
+- **👥 P2P Battle Mode**: Real-time online matchmaking. Play against another human on the same board with synchronized physics.
 
 ### Floating Score Feedback 📈
 - **Dynamic Bubbles**: Floating score labels pop up exactly where points are earned.
@@ -224,7 +220,8 @@ This creates executables in `dist/`:
 | ↓ / S | Move down |
 | ← / A | Move left |
 | → / D | Move right |
-| P / Space | Pause/resume |
+| Space | Pause/resume |
+| P | **Auto-Play Toggle** (Neural/Heuristic) |
 | Q | Quit game |
 | R | Restart (after game over) |
 
@@ -329,5 +326,5 @@ Contributions welcome! Please feel free to submit issues and pull requests.
 
 - [ ] Boss battles or giant mode
 - [ ] Power-ups (shield, ghost mode, etc.)
-- [ ] Multiplayer mode (Real-time P2P)
+- [x] Multiplayer mode (Real-time P2P)
 - [ ] Skins and customization
