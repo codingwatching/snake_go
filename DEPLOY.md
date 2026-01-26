@@ -74,9 +74,22 @@ sudo systemctl restart nginx
 sudo certbot --nginx -d yourdomain.com
 ```
 
-## 6. Maintenance
+## 7. Public Testing Checklist 🚀
+
+Before sharing your URL with the public, go through this checklist:
+
+- [ ] **Firewall**: Ensure port `8080` (or `80/443` if using Nginx) is open in your cloud provider's security group (AWS, GCP, DigitalOcean, etc.).
+- [ ] **Domain**: If possible, map a domain name. It's much easier for people to remember than an IP.
+- [ ] **SSL**: Use Nginx + Certbot (Section 5) to enable `https://`. WebSocket connections are more stable over HTTPS.
+- [ ] **Resources**: Ensure your server has at least 1GB of RAM. The AI inference service is efficient but needs steady CPU/RAM.
+- [ ] **Monitoring**: Run `docker compose logs -f` during the first few hours of public testing to catch any unexpected errors.
+
+## 8. Maintenance & Backup
 
 - **View Logs:** `docker compose logs -f`
 - **Stop Server:** `docker compose down`
 - **Update Server:** `git pull && docker compose up -d --build`
-- **Database Backup:** The file `game.db` in the project root is persisted. You can back it up regularly.
+- **Database & Records Backup:** All your persistent data is in the `data/` folder.
+  - To backup: `cp -r data data_bak`
+  - To restore: Just ensure the `data` folder is present and restart.
+  - The folder includes `game.db` (users/scores) and `records/` (AI training data).

@@ -3,6 +3,7 @@ package game
 import (
 	"database/sql"
 	"log"
+	"os"
 
 	_ "modernc.org/sqlite"
 )
@@ -11,7 +12,10 @@ var DB *sql.DB
 
 func InitDB() {
 	var err error
-	DB, err = sql.Open("sqlite", "game.db")
+	if err := os.MkdirAll("data", 0755); err != nil {
+		log.Fatal("Failed to create data directory:", err)
+	}
+	DB, err = sql.Open("sqlite", "data/game.db")
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}

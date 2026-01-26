@@ -24,7 +24,7 @@ type GameRecorder struct {
 // Filename format: game_{sessionID}_{timestamp}.jsonl
 func NewRecorder(sessionID string) (*GameRecorder, error) {
 	// Ensure records directory exists
-	recordDir := "records"
+	recordDir := "data/records"
 	if err := os.MkdirAll(recordDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create records dir: %w", err)
 	}
