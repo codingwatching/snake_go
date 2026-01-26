@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.23-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 
 # Install build dependencies
 # Robustly configure Alibaba Cloud mirrors by overwriting sources.list directly
