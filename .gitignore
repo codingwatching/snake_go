@@ -47,4 +47,5 @@ __pycache__/
 *.py[cod]
 *$py.class
 ml/checkpoints/
+data/
 
