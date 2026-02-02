@@ -48,4 +48,5 @@ __pycache__/
 *$py.class
 ml/checkpoints/
 data/
+.env
 
