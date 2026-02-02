@@ -1,6 +1,5 @@
 # Build Stage
-# Using a mirror for faster downloads in China regions
-FROM m.daocloud.io/docker.io/library/golang:1.25-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 
 # Install build dependencies
 # Robustly configure Alibaba Cloud mirrors by overwriting sources.list directly
@@ -29,7 +28,7 @@ COPY . .
 RUN CGO_ENABLED=1 GOOS=linux go build -v -o webserver ./cmd/webserver/main.go
 
 # Runtime Stage
-FROM m.daocloud.io/docker.io/library/debian:bookworm-slim
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
 # Same robust mirror configuration for the runtime stage
