@@ -9,4 +9,6 @@ services:
     restart: always
     environment:
       - DETAILED_LOGS=true
+    env_file:
+      - .env
     command: [ "./webserver", "--detailed-logs" ]

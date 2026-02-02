@@ -57,6 +57,7 @@ COPY --from=builder /app/webserver .
 
 # Copy static files and models
 COPY --from=builder /app/web/static ./web/static
+COPY --from=builder /app/pkg/proto ./pkg/proto
 COPY --from=builder /app/ml/checkpoints ./ml/checkpoints
 
 # Expose the game server port
