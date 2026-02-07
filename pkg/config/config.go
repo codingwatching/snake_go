@@ -22,6 +22,14 @@ const (
 	MaxObstacles          = 4
 )
 
+// Prop settings
+const (
+	PropSpawnInterval = 12 * time.Second
+	PropSpawnChance   = 20 // 20% chance every interval
+	MaxPropsOnBoard   = 2
+	PropDuration      = 15 * time.Second // Time before disappearing
+)
+
 // Fireball settings
 const (
 	FireballSpeed    = 48 * time.Millisecond  // Time between fireball moves

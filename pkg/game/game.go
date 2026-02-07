@@ -136,40 +136,64 @@ func (g *Game) Update() {
 		return
 	}
 
-	g.HitPoints = nil   // Clear previous hit points
-	g.ScoreEvents = nil // Clear previous score events
+	g.HitPoints = nil
+	g.ScoreEvents = nil
 
-	// Update each player
+	// Update each player. In synchronized mode, they still move "together" in the same tick,
+	// but UpdatePlayer handles their individual logic.
 	for i := range g.Players {
 		g.UpdatePlayer(i)
 	}
 
 	g.TrySpawnFood()
+	g.TrySpawnProp()
 	g.TrySpawnObstacle()
 	g.CheckTimeLimit()
+	g.updateActiveEffects()
 }
 
-// UpdatePlayer advances a single player's state
+func (g *Game) updateActiveEffects() {
+	now := time.Now()
+	for _, p := range g.Players {
+		var active []*ActiveEffect
+		for _, e := range p.Effects {
+			if now.Before(e.ExpireAt) {
+				e.Duration = e.ExpireAt.Sub(now).Seconds()
+				active = append(active, e)
+			}
+		}
+		p.Effects = active
+	}
+
+	// Clean up expired props on board
+	totalPaused := g.GetTotalPausedTime()
+	var remainingProps []Prop
+	for _, pr := range g.Props {
+		if !pr.IsExpired(totalPaused) {
+			remainingProps = append(remainingProps, pr)
+		}
+	}
+	g.Props = remainingProps
+}
+
+// UpdatePlayer moves a single player and handles its collisions
 func (g *Game) UpdatePlayer(idx int) {
-	if idx >= len(g.Players) {
+	if g.GameOver || g.Paused || idx >= len(g.Players) {
 		return
 	}
-	p := g.Players[idx]
 
-	// Update stun status
+	p := g.Players[idx]
 	p.Stunned = time.Now().Before(p.StunnedUntil)
 	if p.Stunned {
-		return // Skip movement if stunned
+		return
 	}
 
-	// Brain decision logic: Get action from controller
+	// 1. Brain decision
 	if p.Brain != nil {
 		action := p.Brain.GetAction(g, idx)
 		if action.Direction.X != 0 || action.Direction.Y != 0 {
-			// VALIDATE: Prevent 180-degree turns
 			isOpposite := (action.Direction.X != 0 && p.LastMoveDir.X == -action.Direction.X) ||
 				(action.Direction.Y != 0 && p.LastMoveDir.Y == -action.Direction.Y)
-
 			if !isOpposite {
 				p.Direction = action.Direction
 			}
@@ -179,54 +203,227 @@ func (g *Game) UpdatePlayer(idx int) {
 			g.FireByTypeIdx(idx)
 		}
 	}
-
 	p.LastMoveDir = p.Direction
 
-	head := p.Snake[0]
-	newHead := Point{X: head.X + p.Direction.X, Y: head.Y + p.Direction.Y}
+	// 2. Calculate next head
+	nextHead := Point{X: p.Snake[0].X + p.Direction.X, Y: p.Snake[0].Y + p.Direction.Y}
 
-	// Collision check
-	if g.checkCollision(newHead) {
-		log.Printf("[Game] Collision detected for player %d at %+v (IsPVP: %v)", idx, newHead, g.IsPVP)
-		if g.IsPVP {
-			log.Printf("[Game] PVP COLLISION: Player %d hit something at %+v. IsPVP: %v", idx, newHead, g.IsPVP)
-			// In PVP, collision means the OTHER player wins
-			g.GameOver = true
-			g.EndTime = time.Now()
-			g.CrashPoint = newHead
-			if idx == 0 {
-				g.Winner = "ai" // P2 wins
-			} else {
-				g.Winner = "player" // P1 wins
+	// 3. Collision Check
+	if g.checkCollisionForPlayer(idx, nextHead) {
+		// --- THE SHIELD BUFF CHECK ---
+		hasShield := false
+		for i, e := range p.Effects {
+			if e.Type == EffectShield {
+				// Use up the shield!
+				p.Effects = append(p.Effects[:i], p.Effects[i+1:]...)
+				hasShield = true
+				g.SetMessage("🛡️ 保险丝生效！护盾抵消了一次碰撞")
+				g.HitPoints = append(g.HitPoints, nextHead)
+				break
 			}
-		} else {
-			if idx == 0 {
-				log.Printf("[Game] P1 COLLISION (Solo): Hit something at %+v", newHead)
-				// Player 1 dead
+		}
+
+		if !hasShield {
+			if g.IsPVP || idx == 0 {
+				// Player or PVP participant died
 				g.GameOver = true
 				g.EndTime = time.Now()
-				g.CrashPoint = newHead
+				g.CrashPoint = nextHead
+				if g.IsPVP {
+					if idx == 0 {
+						g.Winner = "ai"
+					} else {
+						g.Winner = "player"
+					}
+				}
 			} else {
-				// AI dead, reset it
+				// AI competitor died, reset it
 				p.Snake = []Point{{X: config.Width - 2, Y: config.Height - 2}}
 				p.Direction = Point{X: -1, Y: 0}
 				p.LastMoveDir = Point{X: -1, Y: 0}
-				if !g.IsPVP {
-					g.SetMessage("🤖 AI 竞争者撞墙了！")
-				}
+				g.SetMessage("🤖 AI 竞争者撞墙了！")
 			}
+			return
 		}
+		// Shield was used: "Brake" by returning early without updating position
 		return
 	}
 
-	// Move snake
-	p.Snake = append([]Point{newHead}, p.Snake...)
+	// 4. Move
+	p.Snake = append([]Point{nextHead}, p.Snake...)
+	ate := g.handleFoodCollision(nextHead, p, idx == 0)
 
-	// Food collision
-	ate := g.handleFoodCollision(newHead, p, idx == 0)
+	// --- MAGNET EFFECT ---
+	if !ate {
+		hasMagnet := false
+		for _, e := range p.Effects {
+			if e.Type == EffectMagnet {
+				hasMagnet = true
+				break
+			}
+		}
+		if hasMagnet {
+			// Check nearby food (radius 3)
+			for i := 0; i < len(g.Foods); i++ {
+				food := g.Foods[i]
+				dx := food.Pos.X - nextHead.X
+				dy := food.Pos.Y - nextHead.Y
+				if dx*dx+dy*dy <= 9 { // Radius 3 (squared)
+					// Magnetize!
+					ate = g.handleFoodCollision(food.Pos, p, idx == 0)
+					if ate {
+						// Food was eaten via magnet, break to avoid multiple eat per turn
+						break
+					}
+				}
+			}
+		}
+	}
+
+	g.handlePropCollision(nextHead, p)
 	if !ate {
 		p.Snake = p.Snake[:len(p.Snake)-1]
 	}
+}
+
+func (g *Game) handlePropCollision(pos Point, p *Player) {
+	var remaining []Prop
+	for _, pr := range g.Props {
+		if pr.Pos == pos {
+			// Collected!
+			if pr.Type == PropTrimmer {
+				// Instant effect: shorten snake
+				if len(p.Snake) > 5 {
+					p.Snake = p.Snake[:len(p.Snake)-3]
+					g.SetMessage("✂️ 剪刀手生效！蛇身缩短了")
+				} else {
+					g.SetMessage("✂️ 太短了，剪不动了")
+				}
+			} else if pr.Type == PropChestBig {
+				p.Score += 120
+				g.SetMessageWithType(fmt.Sprintf("%s 哇！开启大宝箱：+120分", pr.GetEmoji()), "bonus")
+				g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
+					Pos:    pos,
+					Amount: 120,
+					Label:  "+120",
+				})
+			} else if pr.Type == PropChestSmall {
+				p.Score += 20
+				g.SetMessageWithType(fmt.Sprintf("%s 捡到钱袋：+20分", pr.GetEmoji()), "bonus")
+				g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
+					Pos:    pos,
+					Amount: 20,
+					Label:  "+20",
+				})
+			} else {
+				effectType := pr.GetEffectType()
+				duration := pr.GetDuration()
+
+				if effectType != EffectNone && duration > 0 {
+					found := false
+					for _, e := range p.Effects {
+						if e.Type == effectType {
+							e.ExpireAt = time.Now().Add(duration)
+							found = true
+							break
+						}
+					}
+					if !found {
+						p.Effects = append(p.Effects, &ActiveEffect{
+							Type:     effectType,
+							ExpireAt: time.Now().Add(duration),
+						})
+					}
+					g.SetMessageWithType(fmt.Sprintf("%s 拾取道具: %s!", pr.GetEmoji(), effectType), "bonus")
+				} else if pr.Type != PropTrimmer {
+					// Fallback for props that are not instant and have no effect type (shouldn't happen with current enum)
+					log.Printf("Warning: Prop collected with no action: %v", pr.Type)
+				}
+			}
+		} else {
+			remaining = append(remaining, pr)
+		}
+	}
+	g.Props = remaining
+}
+
+func (g *Game) checkCollisionForPlayer(idx int, p Point) bool {
+	// Wall
+	if p.X <= 0 || p.X >= config.Width-1 || p.Y <= 0 || p.Y >= config.Height-1 {
+		return true
+	}
+
+	// Check against all snake bodies
+	for i, player := range g.Players {
+		body := player.Snake
+		// If it's another player, they are static right now, but we don't collide with their tail
+		// if they are updated in a regular loop where tails move.
+		// For simplicity, we collide with the whole body except the tail if length > 1
+		if len(body) > 1 {
+			body = body[:len(body)-1]
+		}
+		for _, s := range body {
+			if s == p {
+				return true
+			}
+		}
+
+		// Head-on collision check (against current head positions of others)
+		if i != idx && len(player.Snake) > 0 && player.Snake[0] == p {
+			return true
+		}
+	}
+
+	// Obstacles
+	for _, obs := range g.Obstacles {
+		for _, op := range obs.Points {
+			if op == p {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (g *Game) checkCollisionFair(idx int, newHeads []Point) bool {
+	p := newHeads[idx]
+	// Wall
+	if p.X <= 0 || p.X >= config.Width-1 || p.Y <= 0 || p.Y >= config.Height-1 {
+		return true
+	}
+
+	// Check against all snake bodies
+	for _, player := range g.Players {
+		// If snake is longer than 1, the tail will move out unless it ate food.
+		// For fairness and fluidity, we usually don't collide with the very last segment
+		// if the snake is moving.
+		bodyToCheck := player.Snake
+		if len(bodyToCheck) > 1 {
+			bodyToCheck = bodyToCheck[:len(bodyToCheck)-1]
+		}
+		for _, s := range bodyToCheck {
+			if s == p {
+				return true
+			}
+		}
+	}
+
+	// Check against other players' new heads (Head-on)
+	for i, otherHead := range newHeads {
+		if i != idx && otherHead == p {
+			return true
+		}
+	}
+
+	// Obstacles
+	for _, obs := range g.Obstacles {
+		for _, op := range obs.Points {
+			if op == p {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // CheckTimeLimit checks if the game time has expired
@@ -617,7 +814,15 @@ func (g *Game) FireByTypeIdx(idx int) {
 		return
 	}
 
-	if time.Since(p.LastFireTime) < config.FireballCooldown {
+	cooldown := config.FireballCooldown
+	for _, e := range p.Effects {
+		if e.Type == EffectRapidFire {
+			cooldown = config.FireballCooldown / 2
+			break
+		}
+	}
+
+	if time.Since(p.LastFireTime) < cooldown {
 		return
 	}
 
@@ -633,6 +838,41 @@ func (g *Game) FireByTypeIdx(idx int) {
 		Owner:     owner,
 	}
 	g.Fireballs = append(g.Fireballs, fb)
+
+	// SCATTER SHOT: Shoot two diagonal bullets if effect is active
+	for _, e := range p.Effects {
+		if e.Type == EffectScatterShot {
+			// Diagonal 1
+			d1 := Point{X: p.Direction.X, Y: p.Direction.Y}
+			if d1.X != 0 {
+				d1.Y = 1
+			} else {
+				d1.X = 1
+			}
+
+			// Diagonal 2
+			d2 := Point{X: p.Direction.X, Y: p.Direction.Y}
+			if d2.X != 0 {
+				d2.Y = -1
+			} else {
+				d2.X = -1
+			}
+
+			g.Fireballs = append(g.Fireballs, &Fireball{
+				Pos:       p.Snake[0],
+				Dir:       d1,
+				SpawnTime: time.Now(),
+				Owner:     owner,
+			}, &Fireball{
+				Pos:       p.Snake[0],
+				Dir:       d2,
+				SpawnTime: time.Now(),
+				Owner:     owner,
+			})
+			break
+		}
+	}
+
 	p.LastFireTime = time.Now()
 }
 
@@ -644,115 +884,129 @@ func (g *Game) UpdateFireballs() {
 	g.HitPoints = make([]Point, 0)
 	activeFbs := make([]*Fireball, 0)
 	for _, fb := range g.Fireballs {
-		fb.Pos.X += fb.Dir.X
-		fb.Pos.Y += fb.Dir.Y
 		hit := false
-
-		// Wall collision
-		if fb.Pos.X <= 0 || fb.Pos.X >= config.Width-1 || fb.Pos.Y <= 0 || fb.Pos.Y >= config.Height-1 {
-			hit = true
-			g.HitPoints = append(g.HitPoints, fb.Pos)
+		steps := 1
+		ownerIdx := 0
+		if fb.Owner == "ai" {
+			ownerIdx = 1
 		}
-
-		if !hit {
-			// Check collision with all players
-			for pIdx, player := range g.Players {
-				for i, p := range player.Snake {
-					if p == fb.Pos {
-						// Don't hit own head when firing
-						ownerIdx := 0
-						if fb.Owner == "ai" {
-							ownerIdx = 1
-						}
-						if pIdx == ownerIdx && i == 0 {
-							continue
-						}
-
-						hit = true
-						g.HitPoints = append(g.HitPoints, fb.Pos)
-
-						// Hit logic refined
-						targetPlayer := player
-
-						// Determine attacker
-						attackerIdx := 0
-						if fb.Owner == "ai" {
-							attackerIdx = 1
-						}
-
-						var attackerScore int
-						var label string
-
-						if i == 0 {
-							// HEADSHOT: +50 to attacker, 2s stun to victim
-							attackerScore = 50
-							label = "🎯 HEADSHOT +50"
-							targetPlayer.StunnedUntil = time.Now().Add(2 * time.Second)
-							if pIdx == 0 {
-								g.SetMessageWithType("😱 警告！头部被击中，麻痹2秒！", "important")
-							}
-						} else {
-							// BODY HIT: +10 to attacker, shorten body
-							attackerScore = 10
-							label = "🔥 HIT +10"
-							// Shorten body (remove last 1 segment if possible)
-							segmentsToRemove := 1
-							if len(targetPlayer.Snake) > segmentsToRemove+1 {
-								targetPlayer.Snake = targetPlayer.Snake[:len(targetPlayer.Snake)-segmentsToRemove]
-							}
-						}
-
-						// Award score to attacker
-						if attackerIdx < len(g.Players) {
-							g.Players[attackerIdx].Score += attackerScore
-						}
-
-						g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
-							Pos:    fb.Pos,
-							Amount: attackerScore,
-							Label:  label,
-						})
-						break
-					}
-				}
-				if hit {
+		if ownerIdx < len(g.Players) {
+			for _, e := range g.Players[ownerIdx].Effects {
+				if e.Type == EffectRapidFire {
+					steps = 2
 					break
 				}
 			}
 		}
 
-		if !hit {
-			// Obstacle collision
-			for i := range g.Obstacles {
-				obs := &g.Obstacles[i]
-				for j, p := range obs.Points {
-					if p == fb.Pos {
-						obs.Points = append(obs.Points[:j], obs.Points[j+1:]...)
-						hit = true
-						g.HitPoints = append(g.HitPoints, fb.Pos)
+		for s := 0; s < steps; s++ {
+			fb.Pos.X += fb.Dir.X
+			fb.Pos.Y += fb.Dir.Y
 
-						// Add score (+10) to fireball owner for destroying obstacle
-						ownerIdx := 0
-						if fb.Owner == "ai" {
-							ownerIdx = 1
-						}
-						if ownerIdx < len(g.Players) {
-							g.Players[ownerIdx].Score += 10
-						}
+			// Wall collision
+			if fb.Pos.X <= 0 || fb.Pos.X >= config.Width-1 || fb.Pos.Y <= 0 || fb.Pos.Y >= config.Height-1 {
+				hit = true
+				g.HitPoints = append(g.HitPoints, fb.Pos)
+			}
 
-						g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
-							Pos:    fb.Pos,
-							Amount: 10,
-							Label:  "+10",
-						})
+			if !hit {
+				// Check collision with all players
+				for pIdx, player := range g.Players {
+					for i, p := range player.Snake {
+						if p == fb.Pos {
+							// Don't hit own head when firing
+							selfIdx := 0
+							if fb.Owner == "ai" {
+								selfIdx = 1
+							}
+							if pIdx == selfIdx && i == 0 {
+								continue
+							}
+
+							hit = true
+							g.HitPoints = append(g.HitPoints, fb.Pos)
+
+							// Hit logic
+							targetPlayer := player
+							attackerIdx := 0
+							if fb.Owner == "ai" {
+								attackerIdx = 1
+							}
+
+							var attackerScore int
+							var label string
+
+							if i == 0 {
+								attackerScore = 50
+								label = "🎯 HEADSHOT +50"
+								targetPlayer.StunnedUntil = time.Now().Add(2 * time.Second)
+								if pIdx == 0 {
+									g.SetMessageWithType("😱 警告！头部被击中，麻痹2秒！", "important")
+								}
+							} else {
+								attackerScore = 10
+								label = "🔥 HIT +10"
+								segmentsToRemove := 1
+								if len(targetPlayer.Snake) > segmentsToRemove+1 {
+									targetPlayer.Snake = targetPlayer.Snake[:len(targetPlayer.Snake)-segmentsToRemove]
+								}
+							}
+
+							if attackerIdx < len(g.Players) {
+								g.Players[attackerIdx].Score += attackerScore
+							}
+
+							g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
+								Pos:    fb.Pos,
+								Amount: attackerScore,
+								Label:  label,
+							})
+							break
+						}
+					}
+					if hit {
 						break
 					}
 				}
-				if hit {
-					break
+			}
+
+			if !hit {
+				// Obstacle collision
+				for i := range g.Obstacles {
+					obs := &g.Obstacles[i]
+					for j, p := range obs.Points {
+						if p == fb.Pos {
+							obs.Points = append(obs.Points[:j], obs.Points[j+1:]...)
+							hit = true
+							g.HitPoints = append(g.HitPoints, fb.Pos)
+
+							curOwnerIdx := 0
+							if fb.Owner == "ai" {
+								curOwnerIdx = 1
+							}
+							if curOwnerIdx < len(g.Players) {
+								g.Players[curOwnerIdx].Score += 10
+							}
+
+							g.ScoreEvents = append(g.ScoreEvents, ScoreEvent{
+								Pos:    fb.Pos,
+								Amount: 10,
+								Label:  "+10",
+							})
+							break
+						}
+					}
+					if hit {
+						break
+					}
 				}
 			}
+
+			if hit {
+				break
+			}
 		}
+
 		if !hit {
 			activeFbs = append(activeFbs, fb)
 		}
@@ -790,7 +1044,14 @@ func (g *Game) GetGameStateSnapshot(started bool, serverBoosting bool, difficult
 		Mode:          g.Mode,
 		ScoreEvents:   g.ScoreEvents,
 		Berserker:     g.BerserkerMode,
-		IsPVP:         g.IsPVP,
+	}
+	state.IsPVP = g.IsPVP
+	state.Props = g.Props
+	if len(g.Players) > 0 {
+		state.P1Effects = g.Players[0].Effects
+	}
+	if len(g.Players) > 1 {
+		state.P2Effects = g.Players[1].Effects
 	}
 
 	// Populate P1 fields

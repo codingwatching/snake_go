@@ -43,7 +43,6 @@ func main() {
 		lastDirKeyTime      time.Time
 		lastDirKeyDir       game.Point
 		consecutiveKeyCount = 0
-		aiTickCount         = 0
 	)
 
 	// Check if boost should be triggered
@@ -126,28 +125,9 @@ func main() {
 			if tickCount >= ticksNeeded {
 				tickCount = 0
 				if !g.GameOver && !g.Paused {
-					g.UpdatePlayer(0)
-					g.TrySpawnFood()
-					g.TrySpawnObstacle()
-					g.CheckTimeLimit()
+					g.Update()
 				}
 				render.Render(g, boosting)
-			}
-
-			// AI Tick
-			if len(g.Players) > 1 {
-				aiTickCount++
-				aiTicksNeeded := 13
-				if g.Players[1].Boosting {
-					aiTicksNeeded = 4
-				}
-				if aiTickCount >= aiTicksNeeded {
-					aiTickCount = 0
-					if !g.GameOver && !g.Paused {
-						g.UpdatePlayer(1)
-					}
-					render.Render(g, boosting)
-				}
 			}
 		}
 	}

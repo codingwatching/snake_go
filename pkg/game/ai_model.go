@@ -34,32 +34,41 @@ type ONNXModel struct {
 func StartInferenceService(modelPath string) error {
 	var err error
 	workerInitialized.Do(func() {
-		// 1. Init ONNX Env
+		// 1. Init ONNX Env synchronously to ensure library exists
 		err = initORT()
 		if err != nil {
+			log.Printf("❌ AI Worker environment init failed: %v\n", err)
 			return
 		}
 
-		// 2. Start the lone worker goroutine
+		// 2. Start the worker goroutine
 		go func() {
 			// One model instance for the entire server
 			nn, nerr := loadModelInstance(modelPath)
 			if nerr != nil {
-				log.Printf("CRITICAL: AI Worker failed to load model: %v\n", nerr)
+				log.Printf("⚠️ AI Worker failed to load model: %v. Entering DRAIN mode.\n", nerr)
+				runDrainMode()
 				return
 			}
 			log.Println("🚀 Global AI Optimizer-Worker is now online (Queue-based)")
 
 			// The "Dumping" Loop
 			for req := range predictionQueue {
-				// Execute inference
 				logits := nn.internalPredict(req.Input)
-				// Send back to the specific game session
 				req.ResChan <- logits
 			}
 		}()
 	})
 	return err
+}
+
+func runDrainMode() {
+	fallback := []float32{0.25, 0.25, 0.25, 0.25}
+	log.Println("⚡ AI Worker is in DRAIN mode (returning fallback predictions)")
+	for req := range predictionQueue {
+		// Immediately return to unblock callers
+		req.ResChan <- fallback
+	}
 }
 
 // Predict is the client method. It pushes to the queue and waits for its turn.

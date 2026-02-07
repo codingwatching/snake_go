@@ -77,6 +77,30 @@ func ToProtoGameState(gs game.GameState) *GameStateSnapshot {
 		crashPoint = ToProtoPoint(*gs.CrashPoint)
 	}
 
+	props := make([]*Prop, len(gs.Props))
+	for i, p := range gs.Props {
+		props[i] = &Prop{
+			Pos:  ToProtoPoint(p.Pos),
+			Type: int32(p.Type),
+		}
+	}
+
+	p1Effects := make([]*ActiveEffect, len(gs.P1Effects))
+	for i, e := range gs.P1Effects {
+		p1Effects[i] = &ActiveEffect{
+			Type:     string(e.Type),
+			Duration: e.Duration,
+		}
+	}
+
+	p2Effects := make([]*ActiveEffect, len(gs.P2Effects))
+	for i, e := range gs.P2Effects {
+		p2Effects[i] = &ActiveEffect{
+			Type:     string(e.Type),
+			Duration: e.Duration,
+		}
+	}
+
 	return &GameStateSnapshot{
 		Snake:         snake,
 		Foods:         foods,
@@ -107,6 +131,9 @@ func ToProtoGameState(gs game.GameState) *GameStateSnapshot {
 		IsPVP:         gs.IsPVP,
 		P1Name:        gs.P1Name,
 		P2Name:        gs.P2Name,
+		Props:         props,
+		P1Effects:     p1Effects,
+		P2Effects:     p2Effects,
 	}
 }
 

@@ -160,21 +160,34 @@ func (r *TerminalRenderer) Render(g *game.Game, boosting bool) {
 			} else if emoji, hasFood := foodEmojis[pos]; hasFood && cell == cellEmpty {
 				r.buffer.WriteString(emoji)
 			} else {
-				switch cell {
-				case cellEmpty:
-					r.buffer.WriteString(config.CharEmpty)
-				case cellWall:
-					r.buffer.WriteString(config.CharWall)
-				case cellHead:
-					r.buffer.WriteString(config.CharHead)
-				case cellBody:
-					r.buffer.WriteString(config.CharBody)
-				case cellCrash:
-					r.buffer.WriteString(config.CharCrash)
-				case cellAIHead:
-					r.buffer.WriteString("🤖")
-				case cellAIBody:
-					r.buffer.WriteString("🤖")
+				// Check for props
+				propEmoji := ""
+				for _, pr := range g.Props {
+					if pr.Pos == pos {
+						propEmoji = pr.GetEmoji()
+						break
+					}
+				}
+
+				if propEmoji != "" {
+					r.buffer.WriteString(propEmoji)
+				} else {
+					switch cell {
+					case cellEmpty:
+						r.buffer.WriteString(config.CharEmpty)
+					case cellWall:
+						r.buffer.WriteString(config.CharWall)
+					case cellHead:
+						r.buffer.WriteString(config.CharHead)
+					case cellBody:
+						r.buffer.WriteString(config.CharBody)
+					case cellCrash:
+						r.buffer.WriteString(config.CharCrash)
+					case cellAIHead:
+						r.buffer.WriteString("🤖")
+					case cellAIBody:
+						r.buffer.WriteString("🤖")
+					}
 				}
 			}
 		}

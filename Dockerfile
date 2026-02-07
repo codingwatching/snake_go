@@ -45,10 +45,18 @@ RUN rm -rf /etc/apt/sources.list.d/* && \
 # Download and install ONNX Runtime shared library
 # Version 1.19.2 is a stable recent version
 ENV ORT_VERSION=1.19.2
-RUN curl -L https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION}.tgz -o ort.tgz \
-    && tar -xzf ort.tgz \
-    && cp onnxruntime-linux-x64-${ORT_VERSION}/lib/libonnxruntime.so.${ORT_VERSION} /usr/lib/libonnxruntime.so \
-    && rm -rf onnxruntime-linux-x64-${ORT_VERSION} ort.tgz
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+    ORT_ARCH="x64"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+    ORT_ARCH="aarch64"; \
+    else \
+    echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    curl -L "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-${ORT_ARCH}-${ORT_VERSION}.tgz" -o ort.tgz && \
+    tar -xzf ort.tgz && \
+    cp onnxruntime-linux-${ORT_ARCH}-${ORT_VERSION}/lib/libonnxruntime.so.${ORT_VERSION} /usr/lib/libonnxruntime.so && \
+    rm -rf onnxruntime-linux-${ORT_ARCH}-${ORT_VERSION} ort.tgz
 
 WORKDIR /app
 

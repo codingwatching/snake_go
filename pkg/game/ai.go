@@ -80,7 +80,7 @@ func (g *Game) UpdateCompetitorAI(p *Player) {
 		return
 	}
 
-	newDir, boosting, _ := g.CalculateBestMove(p.Snake, p.LastMoveDir)
+	newDir, boosting, _ := g.CalculateBestMove(1, p.Snake, p.LastMoveDir)
 
 	// Aggressive AI logic (only in Berserker Mode):
 	// AI boosts if it's far from its target OR if it wants to race the player
@@ -175,7 +175,7 @@ func (g *Game) handleNormalAIFire(p *Player) {
 }
 
 // CalculateBestMove computes the best next move for a given snake
-func (g *Game) CalculateBestMove(snake []Point, lastMoveDir Point) (Point, bool, AIContext) {
+func (g *Game) CalculateBestMove(playerIdx int, snake []Point, lastMoveDir Point) (Point, bool, AIContext) {
 	ctx := AIContext{
 		Intent:  IntentIdle,
 		Urgency: 0.0,
@@ -201,13 +201,8 @@ func (g *Game) CalculateBestMove(snake []Point, lastMoveDir Point) (Point, bool,
 		}
 
 		remainingSec := food.GetRemainingSeconds(g.GetTotalPausedTime())
-
-		// Time estimation
 		normalInterval := g.GetMoveIntervalExt(currentDiff, false)
-		timeNeededNormal := float64(dist) * normalInterval.Seconds()
-
-		boostInterval := g.GetMoveIntervalExt(currentDiff, true)
-		timeNeededBoost := float64(dist) * boostInterval.Seconds()
+		timeNeededBoost := float64(dist) * g.GetMoveIntervalExt(currentDiff, true).Seconds()
 
 		if timeNeededBoost > float64(remainingSec) && len(g.Foods) > 1 {
 			continue
@@ -220,13 +215,57 @@ func (g *Game) CalculateBestMove(snake []Point, lastMoveDir Point) (Point, bool,
 			maxUtility = utility
 			target = food
 			foundFood = true
-			shouldBoost = timeNeededNormal > float64(remainingSec)
+			shouldBoost = (float64(dist) * normalInterval.Seconds()) > float64(remainingSec)
 		}
 	}
 
+	// --- NEW: Prop Targeting ---
+	var targetProp *Prop
+	for i := range g.Props {
+		p := &g.Props[i]
+		dist := float64(abs(p.Pos.X-head.X) + abs(p.Pos.Y-head.Y))
+		if dist == 0 {
+			dist = 0.5
+		}
+
+		// Treat props as high-value targets (base "score" of 80 for utility calc)
+		propUtility := 80.0 / dist
+		if propUtility > maxUtility {
+			maxUtility = propUtility
+			targetProp = p
+			foundFood = true // Reuse flag to indicate we have a destination
+		}
+	}
+
+	var targetPos Point
 	if foundFood {
 		ctx.Intent = IntentHunt
-		ctx.TargetPos = &target.Pos
+		if targetProp != nil {
+			targetPos = targetProp.Pos
+		} else {
+			targetPos = target.Pos
+		}
+		ctx.TargetPos = &targetPos
+
+		// --- NEW: Competitive Boosting ---
+		distToTarget := abs(targetPos.X-head.X) + abs(targetPos.Y-head.Y)
+
+		// 1. Race logic: if an enemy is also close to our target, boost!
+		for i, other := range g.Players {
+			if i == playerIdx || len(other.Snake) == 0 {
+				continue
+			}
+			enemyDist := abs(targetPos.X-other.Snake[0].X) + abs(targetPos.Y-other.Snake[0].Y)
+			if distToTarget < 8 && enemyDist < 8 {
+				shouldBoost = true
+				break
+			}
+		}
+
+		// 2. Catch-up logic (Berserker Mode): if food is far, occasionally boost to close gap
+		if !shouldBoost && distToTarget > 10 && g.BerserkerMode && rand.Float32() < 0.2 {
+			shouldBoost = true
+		}
 	}
 
 	if !foundFood {
@@ -256,11 +295,11 @@ func (g *Game) CalculateBestMove(snake []Point, lastMoveDir Point) (Point, bool,
 		}
 
 		nextPos := Point{X: head.X + dir.X, Y: head.Y + dir.Y}
-		if !g.isSafe(nextPos) {
+		if !g.isSafe(nextPos, playerIdx) {
 			continue
 		}
 
-		reachableSpace := g.countReachableSpace(nextPos)
+		reachableSpace := g.countReachableSpace(nextPos, playerIdx)
 		score := float64(reachableSpace) * 50.0
 
 		isSurvive := false
@@ -269,10 +308,10 @@ func (g *Game) CalculateBestMove(snake []Point, lastMoveDir Point) (Point, bool,
 			isSurvive = true
 		}
 
-		distToFood := float64(abs(target.Pos.X-nextPos.X) + abs(target.Pos.Y-nextPos.Y))
-		score += (100.0 - distToFood) * 2.0
+		distToTarget := float64(abs(targetPos.X-nextPos.X) + abs(targetPos.Y-nextPos.Y))
+		score += (100.0 - distToTarget) * 2.0
 
-		if nextPos == target.Pos {
+		if nextPos == targetPos {
 			score += 1000.0
 		}
 
@@ -375,27 +414,43 @@ func (g *Game) handleAIFire(p *Player, ownerIdx int) bool {
 	return false
 }
 
-// countReachableSpace uses a simple flood fill to count safe tiles
-func (g *Game) countReachableSpace(start Point) int {
+// countReachableSpace uses a simple flood fill to count safe tiles.
+// It is now more optimistic about its own tail.
+func (g *Game) countReachableSpace(start Point, ownerIdx int) int {
 	visited := make(map[Point]bool)
+
+	// Pre-fill visited with all current obstacles
+	for i, p := range g.Players {
+		body := p.Snake
+		if i == ownerIdx && len(body) > 1 {
+			// For our own snake, we assume the tail will move.
+			// This allows the AI to enter loops following its own tail.
+			body = body[:len(body)-1]
+		}
+		for _, s := range body {
+			visited[s] = true
+		}
+	}
+	for _, obs := range g.Obstacles {
+		for _, op := range obs.Points {
+			visited[op] = true
+		}
+	}
+
+	if visited[start] {
+		return 0
+	}
+
 	queue := []Point{start}
 	visited[start] = true
 	count := 0
-
-	// Create a temporary "occupied" map for faster lookups
-	occupied := make(map[Point]bool)
-	for _, p := range g.Players {
-		for _, pos := range p.Snake {
-			occupied[pos] = true
-		}
-	}
 
 	for len(queue) > 0 {
 		curr := queue[0]
 		queue = queue[1:]
 		count++
 
-		if count > 450 {
+		if count > 400 { // Performance limit
 			return count
 		}
 
@@ -403,38 +458,8 @@ func (g *Game) countReachableSpace(start Point) int {
 		for _, d := range dirs {
 			next := Point{curr.X + d.X, curr.Y + d.Y}
 
+			// Wall check
 			if next.X <= 0 || next.X >= config.Width-1 || next.Y <= 0 || next.Y >= config.Height-1 {
-				continue
-			}
-
-			if occupied[next] {
-				// Simple check: ignore tail positions if they might move
-				isTail := false
-				for _, p := range g.Players {
-					if len(p.Snake) > 0 && next == p.Snake[len(p.Snake)-1] {
-						isTail = true
-						break
-					}
-				}
-				if !isTail {
-					continue
-				}
-			}
-
-			// Obstacle check
-			isObs := false
-			for _, obs := range g.Obstacles {
-				for _, op := range obs.Points {
-					if op == next {
-						isObs = true
-						break
-					}
-				}
-				if isObs {
-					break
-				}
-			}
-			if isObs {
 				continue
 			}
 
@@ -447,24 +472,67 @@ func (g *Game) countReachableSpace(start Point) int {
 	return count
 }
 
-// isSafe checks if a position is not a wall, snake body or obstacle
-func (g *Game) isSafe(p Point) bool {
+// isSafe checks if a position is not a wall, snake body or obstacle.
+// It also checks for "threat zones" created by other players' heads.
+func (g *Game) isSafe(p Point, ownerIdx int) bool {
+	// 1. Boundary check
 	if p.X <= 0 || p.X >= config.Width-1 || p.Y <= 0 || p.Y >= config.Height-1 {
 		return false
 	}
 
-	for _, player := range g.Players {
-		for _, s := range player.Snake {
-			if s == p {
+	// 2. Obstacle check
+	for _, obs := range g.Obstacles {
+		for _, op := range obs.Points {
+			if p == op {
 				return false
 			}
 		}
 	}
 
-	for _, obs := range g.Obstacles {
-		for _, op := range obs.Points {
-			if p == op {
-				return false
+	// 3. Players check (Body and Head Proximity)
+	for i, player := range g.Players {
+		if len(player.Snake) == 0 {
+			continue
+		}
+		bodyToCheck := player.Snake
+		if i == ownerIdx {
+			// For our own snake, we can follow our tail if we are long enough
+			if len(bodyToCheck) > 1 {
+				bodyToCheck = bodyToCheck[:len(bodyToCheck)-1]
+			} else {
+				bodyToCheck = []Point{}
+			}
+
+			// Self-collision check
+			for _, s := range bodyToCheck {
+				if s == p {
+					return false
+				}
+			}
+		} else {
+			// Enemy check
+			// Enemy Body check (all except tail which is about to move)
+			enemyBody := player.Snake
+			if len(enemyBody) > 1 {
+				enemyBody = enemyBody[:len(enemyBody)-1]
+			}
+			for _, s := range enemyBody {
+				if s == p {
+					return false
+				}
+			}
+
+			// --- THE CRITICAL FIX: Enemy Head Proximity ---
+			// If p is adjacent to the enemy head, they could move into p in the same tick!
+			enemyHead := player.Snake[0]
+			distToEnemyHead := abs(enemyHead.X-p.X) + abs(enemyHead.Y-p.Y)
+
+			if distToEnemyHead <= 1 {
+				// Only be cautious in non-berserker modes.
+				// In Berserker mode, we 'dare' to challenge for the same spot!
+				if !g.BerserkerMode {
+					return false
+				}
 			}
 		}
 	}

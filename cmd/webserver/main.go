@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"crypto/rand"
+
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 	"github.com/trytobebee/snake_go/pkg/config"
@@ -286,19 +288,35 @@ func (mm *MatchMaker) CancelSearch(gs *GameServer) {
 func (mm *MatchMaker) runPVPCountdown(m *Match) {
 	for i := 3; i > 0; i-- {
 		m.Mu.Lock()
+		if m.Closing {
+			m.Mu.Unlock()
+			return
+		}
 		m.Game.Message = fmt.Sprintf("🔥 STARTING IN %d...", i)
 		m.Game.MessageType = "important"
 		state := m.Game.GetGameStateSnapshot(true, false, m.P1.difficulty)
 		m.Mu.Unlock()
 
 		log.Printf("[PVP] 🔔 Countdown: %d... (Players: %s, %s)\n", i, m.P1.user.Username, m.P2.user.Username)
-		m.P1.sendMsg(pb.ToProtoServerMessage("state", nil, &state, nil, nil, nil, "", "", 0))
-		m.P2.sendMsg(pb.ToProtoServerMessage("state", nil, &state, nil, nil, nil, "", "", 0))
-		time.Sleep(1 * time.Second)
 
+		// Send personalized state to P1
+		stateP1 := state
+		stateP1.Message = fmt.Sprintf("🟢 YOU ARE PLAYER 1 (GREEN)\nSTARTING IN %d...", i)
+		m.P1.sendMsg(pb.ToProtoServerMessage("state", nil, &stateP1, nil, nil, nil, "", "", 0))
+
+		// Send personalized state to P2
+		stateP2 := state
+		stateP2.Message = fmt.Sprintf("🟣 YOU ARE PLAYER 2 (PURPLE)\nSTARTING IN %d...", i)
+		m.P2.sendMsg(pb.ToProtoServerMessage("state", nil, &stateP2, nil, nil, nil, "", "", 0))
+
+		time.Sleep(1 * time.Second)
 	}
 
 	m.Mu.Lock()
+	if m.Closing {
+		m.Mu.Unlock()
+		return
+	}
 	m.Game.Message = "🚀 GO!"
 	m.Game.MessageType = "important"
 	m.Game.Paused = false
@@ -324,19 +342,19 @@ func (mm *MatchMaker) runPVPGame(m *Match) {
 			return
 		}
 
-		// Update game logic (using P1 as the "driver" for settings context)
-		p1 := m.P1
-		changed := p1.update() // This updates the shared m.Game
+		// Update game logic for both players
+		c1 := m.P1.update()
+		c2 := m.P2.update()
+		changed := c1 || c2
 
 		if changed {
-			state := m.Game.GetGameStateSnapshot(true, false, p1.difficulty)
+			state := m.Game.GetGameStateSnapshot(true, false, m.P1.difficulty)
 
 			// Broadcast to both
 			m.P1.sendMsg(pb.ToProtoServerMessage("state", nil, &state, nil, nil, nil, "", "", 0))
 			m.P2.sendMsg(pb.ToProtoServerMessage("state", nil, &state, nil, nil, nil, "", "", 0))
 
 			// Reset one-shot effects ONLY after broadcast
-
 			m.Game.ScoreEvents = nil
 			m.Game.HitPoints = nil
 			m.Game.Message = ""
@@ -391,7 +409,13 @@ func (m *Match) handleMatchOver() {
 	if *detailedLogs {
 		log.Printf("[PVP] 📝 Recording detailed game sessions for both players...\n")
 		if m.P1.user != nil && len(gameObj.Players) > 0 {
-			game.RecordGameSession(m.P1.user.Username, m.P1.sessionStart, time.Now(), gameObj.Players[0].Score, gameObj.Winner, "pvp", m.P1.difficulty)
+			p1Res := "lost"
+			if gameObj.Winner == "player" {
+				p1Res = "won"
+			} else if gameObj.Winner == "draw" {
+				p1Res = "draw"
+			}
+			game.RecordGameSession(m.P1.user.Username, m.P1.sessionStart, time.Now(), gameObj.Players[0].Score, p1Res, "pvp", m.P1.difficulty)
 		}
 		if m.P2.user != nil && len(gameObj.Players) > 1 {
 			var p2Res string
@@ -576,127 +600,182 @@ func (gs *GameServer) updateBoostingOnly() {
 	}
 }
 
+// Check if any other player has the TIMEWARP effect active
+func (gs *GameServer) isOthersTimeWarpActive() bool {
+	myIdx := 0
+	if gs.role == "p2" {
+		myIdx = 1
+	}
+	for i, p := range gs.game.Players {
+		if i == myIdx {
+			continue
+		}
+		for _, e := range p.Effects {
+			if e.Type == game.EffectTimeWarp {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (gs *GameServer) update() bool {
 	changed := false
 
 	// Sync manual boosting state to game if not in AutoPlay
 	gs.updateBoostingOnly()
 
+	// 1. Clear per-frame events at the start of the update cycle
+	gs.game.HitPoints = nil
+	gs.game.ScoreEvents = nil
+
 	gs.tickCount++
 
-	if !gs.started {
-		return false
-	}
+	// 2. Movement logic (Only if started)
+	if gs.started {
+		// Determine Tick threshold based on difficulty and boosting
+		ticksNeeded := config.MidTicks
+		boostTicks := config.MidBoostTicks
 
-	// Determine Tick threshold based on difficulty and boosting
-	ticksNeeded := config.MidTicks
-	boostTicks := config.MidBoostTicks
-
-	switch gs.difficulty {
-	case "low":
-		ticksNeeded = config.LowTicks
-		boostTicks = config.LowBoostTicks
-	case "mid":
-		ticksNeeded = config.MidTicks
-		boostTicks = config.MidBoostTicks
-	case "high":
-		ticksNeeded = config.HighTicks
-		boostTicks = config.HighBoostTicks
-	}
-
-	isBoosted := false
-	if len(gs.game.Players) > 0 {
-		isBoosted = gs.game.Players[0].Boosting
-		if gs.role == "p2" && len(gs.game.Players) > 1 {
-			isBoosted = gs.game.Players[1].Boosting
+		switch gs.difficulty {
+		case "low":
+			ticksNeeded = config.LowTicks
+			boostTicks = config.LowBoostTicks
+		case "mid":
+			ticksNeeded = config.MidTicks
+			boostTicks = config.MidBoostTicks
+		case "high":
+			ticksNeeded = config.HighTicks
+			boostTicks = config.HighBoostTicks
 		}
-	}
 
-	if isBoosted {
-		ticksNeeded = boostTicks
-	}
-	// ...
-
-	if gs.tickCount >= ticksNeeded {
-		gs.tickCount = 0
-		if !gs.game.GameOver && !gs.game.Paused {
-			gs.game.Update()
-			changed = true
-
-			// --- Recording Logic ---
-			if gs.game.Recorder != nil && len(gs.game.Players) > 0 {
-				p1 := gs.game.Players[0]
-				snapshot := gs.game.GetGameStateSnapshot(gs.started, gs.boosting, gs.difficulty)
-
-				// Reward Calculation
-				reward := float64(p1.Score - gs.game.LastScore)
-				if gs.game.GameOver && gs.game.Winner != "player" {
-					reward -= 100.0 // Death penalty
-				} else if !gs.game.GameOver {
-					reward += 0.1 // Survival bonus
-				}
-				gs.game.LastScore = p1.Score
-
-				// Capture Action
-				actionData := game.ActionData{
-					Direction: p1.LastMoveDir,
-					Boost:     p1.Boosting,
-					Fire:      gs.firedThisStep,
-				}
-				gs.firedThisStep = false // Reset for next step
-
-				rec := game.StepRecord{
-					StepID:    gs.stepID,
-					Timestamp: time.Now().UnixMilli(),
-					State:     snapshot,
-					Action:    actionData,
-					AIContext: gs.game.CurrentAIContext,
-					Reward:    reward,
-					Done:      gs.game.GameOver,
-				}
-				gs.game.Recorder.RecordStep(rec)
-				gs.stepID++
+		isBoosted := false
+		if len(gs.game.Players) > 0 {
+			isBoosted = gs.game.Players[0].Boosting
+			if gs.role == "p2" && len(gs.game.Players) > 1 {
+				isBoosted = gs.game.Players[1].Boosting
 			}
-			// -----------------------
 		}
-	}
 
-	// ... (AI and Fireball update unchanged)
+		if isBoosted {
+			ticksNeeded = boostTicks
+		}
 
-	if gs.started && !gs.game.GameOver && len(gs.game.Players) > 1 && gs.game.Players[1].Score > 0 {
-		// Temporary debug log
+		// --- PROP EFFECTS: SPEED & TIMEWARP ---
+		// If OTHERS have TimeWarp, I am slowed down
+		if gs.isOthersTimeWarpActive() {
+			ticksNeeded = ticksNeeded * 2
+		}
+		// --------------------------------------
+
+		if gs.tickCount >= ticksNeeded {
+			gs.tickCount = 0
+			if !gs.game.GameOver && !gs.game.Paused {
+				playerIdx := 0
+				if gs.role == "p2" {
+					playerIdx = 1
+				}
+				if playerIdx < len(gs.game.Players) {
+					gs.game.UpdatePlayer(playerIdx)
+					changed = true
+				}
+
+				// --- Recording Logic ---
+				if gs.game.Recorder != nil && len(gs.game.Players) > 0 {
+					p1 := gs.game.Players[0]
+					snapshot := gs.game.GetGameStateSnapshot(gs.started, gs.boosting, gs.difficulty)
+
+					// Reward Calculation
+					reward := float64(p1.Score - gs.game.LastScore)
+					if gs.game.GameOver && gs.game.Winner != "player" {
+						reward -= 100.0 // Death penalty
+					} else if !gs.game.GameOver {
+						reward += 0.1 // Survival bonus
+					}
+					gs.game.LastScore = p1.Score
+
+					// Capture Action
+					actionData := game.ActionData{
+						Direction: p1.LastMoveDir,
+						Boost:     p1.Boosting,
+						Fire:      gs.firedThisStep,
+					}
+					gs.firedThisStep = false // Reset for next step
+
+					rec := game.StepRecord{
+						StepID:    gs.stepID,
+						Timestamp: time.Now().UnixMilli(),
+						State:     snapshot,
+						Action:    actionData,
+						AIContext: gs.game.CurrentAIContext,
+						Reward:    reward,
+						Done:      gs.game.GameOver,
+					}
+					gs.game.Recorder.RecordStep(rec)
+					gs.stepID++
+				}
+				// -----------------------
+			}
+		}
+
 	}
 
 	// Move AI snake independently (if any)
-	if !gs.game.IsPVP && len(gs.game.Players) > 1 {
+	if gs.started && !gs.game.IsPVP && len(gs.game.Players) > 1 {
 		gs.aiTickCount++
 		aiTicksNeeded := config.MidTicks
 		if gs.game.Players[1].Boosting {
 			aiTicksNeeded = config.MidBoostTicks
 		}
+
+		// If P1 has TimeWarp, AI is slowed
+		p1HasWarp := false
+		if len(gs.game.Players) > 0 {
+			for _, e := range gs.game.Players[0].Effects {
+				if e.Type == game.EffectTimeWarp {
+					p1HasWarp = true
+					break
+				}
+			}
+		}
+		if p1HasWarp {
+			aiTicksNeeded = aiTicksNeeded * 2
+		}
+
 		if gs.aiTickCount >= aiTicksNeeded {
 			gs.aiTickCount = 0
 			if !gs.game.GameOver && !gs.game.Paused {
-				// Competitor AI is already handled in game.UpdatePlayer if IsAI is true
-				// But we need to ensure the tick logic matches.
-				// For simplicity, we assume UpdatePlayer handles it.
+				gs.game.UpdatePlayer(1)
+				changed = true
 			}
 		}
 	}
 
+	// Periodic World Update (Food, Obstacles, Time Limit) - always check if game is active
+	if !gs.game.GameOver && !gs.game.Paused && (gs.started || gs.game.Mode == "pvp") {
+		gs.game.TrySpawnFood()
+		gs.game.TrySpawnProp()
+		gs.game.TrySpawnObstacle()
+		gs.game.CheckTimeLimit()
+		// Note: we don't necessarily set changed=true here to avoid flooding,
+		// but if food or time changed significantly it will be sent in the next snake move anyway.
+	}
+
 	// Update fireballs independently at FireballSpeed
-	gs.fireballTickCount++
-	fbTicks := int(config.FireballSpeed / config.BaseTick)
-	if gs.fireballTickCount >= fbTicks {
-		gs.fireballTickCount = 0
-		if !gs.game.GameOver && !gs.game.Paused {
-			gs.game.UpdateFireballs()
-			changed = true
+	if gs.started {
+		gs.fireballTickCount++
+		fbTicks := int(config.FireballSpeed / config.BaseTick)
+		if gs.fireballTickCount >= fbTicks {
+			gs.fireballTickCount = 0
+			if !gs.game.GameOver && !gs.game.Paused {
+				gs.game.UpdateFireballs()
+				changed = true
+			}
 		}
 	}
 
-	// Any message or special event also counts as a change
-	if gs.game.Message != "" || len(gs.game.HitPoints) > 0 || len(gs.game.ScoreEvents) > 0 {
+	// IMPORTANT: Any message or special event also counts as a change that MUST be sent
+	if gs.game.Message != "" || len(gs.game.HitPoints) > 0 || len(gs.game.ScoreEvents) > 0 || gs.game.GameOver {
 		changed = true
 	}
 
@@ -835,12 +914,15 @@ func notifyFeishu(username, feedback string) {
 func broadcastSessionCount() {
 	clientsMu.RLock()
 	count := len(clients)
+	var targets []*GameServer
+	for _, gs := range clients {
+		targets = append(targets, gs)
+	}
 	clientsMu.RUnlock()
 
-	clientsMu.RLock()
-	defer clientsMu.RUnlock()
-	for _, gs := range clients {
-		gs.sendMsg(pb.ToProtoServerMessage("update_counts", nil, nil, nil, nil, nil, "", "", count))
+	msg := pb.ToProtoServerMessage("update_counts", nil, nil, nil, nil, nil, "", "", count)
+	for _, gs := range targets {
+		go gs.sendMsg(msg)
 	}
 }
 
@@ -853,9 +935,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	log.Println("New WebSocket connection from:", r.RemoteAddr)
-	// Generate a short unique ID for this connection
 	// Generate a unique ID for this connection
-	connID := fmt.Sprintf("%x", time.Now().UnixNano())
+	b := make([]byte, 8)
+	rand.Read(b)
+	connID := fmt.Sprintf("%x-%d", b, time.Now().UnixNano())
 
 	gs := NewGameServer(connID)
 
@@ -909,6 +992,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if !gs.match.Closing {
 				gs.match.Closing = true
 				log.Printf("[PVP] 📡 Match terminated due to %s disconnecting\n", gs.user.Username)
+				gs.match.handleMatchOver() // Ensure P2 gets reset to solo mode
 			}
 			gs.match.Mu.Unlock()
 		}
@@ -958,15 +1042,26 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 					// Kick old connection for this user if it exists
 					clientsMu.Lock()
+					var killee *GameServer
 					for id, c := range clients {
 						if c.user != nil && c.user.Username == msg.Username && id != connID {
-							log.Printf("⚠️ Kicking old session for user: %s (connID: %s)\n", msg.Username, id)
-							if c.close != nil {
-								c.close() // This will cause their ReadMessage to fail and trigger defer
-							}
+							log.Printf("⚠️ Found old session for user: %s (connID: %s)\n", msg.Username, id)
+							killee = c
+							break
 						}
 					}
 					clientsMu.Unlock()
+
+					if killee != nil {
+						log.Printf("⚠️ Kicking old session for user: %s\n", msg.Username)
+						go func(c *GameServer) {
+							msg := pb.ToProtoServerMessage("error", nil, nil, nil, nil, nil, "Logged in from another location.", "", 0)
+							c.sendMsg(msg)
+							if c.close != nil {
+								c.close()
+							}
+						}(killee)
+					}
 
 					gs.user = user
 					gs.sendMsg(pb.ToProtoServerMessage("auth_success", nil, nil, nil, nil, user, "", "", 0))
@@ -1002,6 +1097,14 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			if msg.Action == "ping" {
 				gs.sendMsg(pb.ToProtoServerMessage("pong", nil, nil, nil, nil, nil, "", "", 0))
 				continue
+			}
+
+			if msg.Action == "logout" {
+				log.Printf("👋 Logout received for user: %v\n", gs.user)
+				if gs.close != nil {
+					gs.close()
+				}
+				return // Terminate the read loop
 			}
 
 			if msg.Action == "submit_score" {
@@ -1091,8 +1194,16 @@ func main() {
 	port := ":8080"
 	log.Printf("🚀 Snake Game Web Server starting on http://localhost%s\n", port)
 	http.HandleFunc("/admin/feedback", func(w http.ResponseWriter, r *http.Request) {
-		// Simple basic security: checking for a secret query param or just simple list
-		// In production, you'd want real auth here.
+		// Simple basic security: checking for a secret query param
+		secret := os.Getenv("ADMIN_SECRET")
+		if secret == "" {
+			secret = "admin123" // Fallback if not configured
+		}
+		if r.URL.Query().Get("key") != secret {
+			http.Error(w, "Unauthorized. Please provide valid ?key=...", http.StatusUnauthorized)
+			return
+		}
+
 		rows, err := game.DB.Query("SELECT username, message, created_at FROM feedback ORDER BY created_at DESC LIMIT 50")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1102,7 +1213,7 @@ func main() {
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprintf(w, "<html><head><title>Admin - Feedback</title><style>body{font-family:sans-serif;background:#1a1a2e;color:#fff;padding:20px;} table{width:100%%;border-collapse:collapse;} th,td{border:1px solid #444;padding:12px;text-align:left;} th{background:#333;}</style></head><body>")
-		fmt.Fprintf(w, "<h1>📩 Recent User Feedback</h1><table><tr><th>Time</th><th>User</th><th>Message</th></tr>")
+		fmt.Fprintf(w, "<h1>📩 Recent User Feedback</h1><p>Welcome, Admin. Showing last 50 entries.</p><table><tr><th>Time</th><th>User</th><th>Message</th></tr>")
 		for rows.Next() {
 			var user, msg, timeStr string
 			rows.Scan(&user, &msg, &timeStr)

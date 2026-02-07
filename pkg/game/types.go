@@ -18,6 +18,47 @@ const (
 	FoodRed                    // Red, 40 points, 10s
 )
 
+// PropType represents different types of item props
+type PropType int
+
+const (
+	PropShield      PropType = iota // Shield (Protects against 1 collision/fireball)
+	PropTimeWarp                    // Time Warp (Slows down everyone else)
+	PropTrimmer                     // Shorten snake (Removes last 3 segments)
+	PropMagnet                      // Magnet (Attracts food nearby)
+	PropChestBig                    // Big Treasure Chest (120 points)
+	PropChestSmall                  // Small Treasure Chest (20 points)
+	PropRapidFire                   // Rapid Fire (Reduces fireball cooldown)
+	PropScatterShot                 // Scatter Shot (Fire 3 fireballs at once)
+)
+
+// Prop represents an item on the board
+type Prop struct {
+	Pos               Point
+	Type              PropType
+	SpawnTime         time.Time
+	PausedTimeAtSpawn time.Duration
+}
+
+// EffectType represents duration-based status effects
+type EffectType string
+
+const (
+	EffectShield      EffectType = "SHIELD"
+	EffectTimeWarp    EffectType = "TIMEWARP"
+	EffectMagnet      EffectType = "MAGNET"
+	EffectRapidFire   EffectType = "RAPIDFIRE"
+	EffectScatterShot EffectType = "SCATTER"
+	EffectNone        EffectType = "NONE"
+)
+
+// ActiveEffect represents a status effect currently affecting a player
+type ActiveEffect struct {
+	Type     EffectType `json:"type"`
+	ExpireAt time.Time  `json:"-"`
+	Duration float64    `json:"duration"` // remaining seconds for client
+}
+
 // Food represents a food item on the board
 type Food struct {
 	Pos               Point
@@ -51,18 +92,19 @@ type ScoreEvent struct {
 
 // Player represents a participant in the game (human or AI)
 type Player struct {
-	Snake        []Point    `json:"snake"`
-	Direction    Point      `json:"direction"`
-	LastMoveDir  Point      `json:"lastMoveDir"`
-	Score        int        `json:"score"`
-	FoodEaten    int        `json:"foodEaten"`
-	StunnedUntil time.Time  `json:"-"`
-	Stunned      bool       `json:"stunned"`
-	Boosting     bool       `json:"boosting"`
-	LastFireTime time.Time  `json:"-"`
-	Name         string     `json:"name"`
-	Brain        Controller `json:"-"`
-	Controller   string     `json:"controllerType"` // "manual", "heuristic", "neural"
+	Snake        []Point         `json:"snake"`
+	Direction    Point           `json:"direction"`
+	LastMoveDir  Point           `json:"lastMoveDir"`
+	Score        int             `json:"score"`
+	FoodEaten    int             `json:"foodEaten"`
+	StunnedUntil time.Time       `json:"-"`
+	Stunned      bool            `json:"stunned"`
+	Boosting     bool            `json:"boosting"`
+	LastFireTime time.Time       `json:"-"`
+	Name         string          `json:"name"`
+	Brain        Controller      `json:"-"`
+	Controller   string          `json:"controllerType"` // "manual", "heuristic", "neural"
+	Effects      []*ActiveEffect `json:"effects"`        // Status effects
 }
 
 // Game represents the main game state
@@ -80,6 +122,7 @@ type Game struct {
 	PausedTime        time.Duration // Accumulated pause time
 	PauseStart        time.Time     // Pause start time
 	LastFoodSpawn     time.Time     // Last food spawn time
+	LastPropSpawn     time.Time     // Last item spawn time
 	LastObstacleSpawn time.Time     // Last obstacle spawn time
 	TimerStarted      bool          // Whether the竞技 timer has started
 
@@ -87,8 +130,9 @@ type Game struct {
 	Message     string // Current message to display
 	MessageType string // Type of message: "normal", "bonus", "important"
 
-	// Obstacle system
+	// Obstacle & Prop system
 	Obstacles []Obstacle // Temporary walls in the middle of the board
+	Props     []Prop     // Active items on board
 
 	// Fireball system
 	Fireballs []*Fireball // Active projectiles
@@ -115,35 +159,38 @@ type FoodInfo struct {
 
 // GameState is a snapshot of the current game for client synchronization
 type GameState struct {
-	Snake         []Point      `json:"snake"`
-	Foods         []FoodInfo   `json:"foods"`
-	Score         int          `json:"score"`
-	FoodEaten     int          `json:"foodEaten"`
-	EatingSpeed   float64      `json:"eatingSpeed"`
-	Started       bool         `json:"started"`
-	GameOver      bool         `json:"gameOver"`
-	Paused        bool         `json:"paused"`
-	Boosting      bool         `json:"boosting"`
-	AutoPlay      bool         `json:"autoPlay"`
-	Difficulty    string       `json:"difficulty"`
-	Message       string       `json:"message,omitempty"`
-	MessageType   string       `json:"messageType,omitempty"` // "normal", "bonus", "important"
-	CrashPoint    *Point       `json:"crashPoint,omitempty"`
-	Obstacles     []Obstacle   `json:"obstacles"`
-	Fireballs     []*Fireball  `json:"fireballs"`
-	HitPoints     []Point      `json:"hitPoints"`
-	AISnake       []Point      `json:"aiSnake"`
-	AIScore       int          `json:"aiScore"`
-	TimeRemaining int          `json:"timeRemaining"`
-	Winner        string       `json:"winner"`
-	AIStunned     bool         `json:"aiStunned"`
-	PlayerStunned bool         `json:"playerStunned"`
-	Mode          string       `json:"mode"`
-	ScoreEvents   []ScoreEvent `json:"scoreEvents"`
-	Berserker     bool         `json:"berserker"`
-	IsPVP         bool         `json:"isPVP"`
-	P1Name        string       `json:"p1Name"`
-	P2Name        string       `json:"p2Name"`
+	Snake         []Point         `json:"snake"`
+	Foods         []FoodInfo      `json:"foods"`
+	Score         int             `json:"score"`
+	FoodEaten     int             `json:"foodEaten"`
+	EatingSpeed   float64         `json:"eatingSpeed"`
+	Started       bool            `json:"started"`
+	GameOver      bool            `json:"gameOver"`
+	Paused        bool            `json:"paused"`
+	Boosting      bool            `json:"boosting"`
+	AutoPlay      bool            `json:"autoPlay"`
+	Difficulty    string          `json:"difficulty"`
+	Message       string          `json:"message,omitempty"`
+	MessageType   string          `json:"messageType,omitempty"` // "normal", "bonus", "important"
+	CrashPoint    *Point          `json:"crashPoint,omitempty"`
+	Obstacles     []Obstacle      `json:"obstacles"`
+	Fireballs     []*Fireball     `json:"fireballs"`
+	HitPoints     []Point         `json:"hitPoints"`
+	AISnake       []Point         `json:"aiSnake"`
+	AIScore       int             `json:"aiScore"`
+	TimeRemaining int             `json:"timeRemaining"`
+	Winner        string          `json:"winner"`
+	AIStunned     bool            `json:"aiStunned"`
+	PlayerStunned bool            `json:"playerStunned"`
+	Mode          string          `json:"mode"`
+	ScoreEvents   []ScoreEvent    `json:"scoreEvents"`
+	Berserker     bool            `json:"berserker"`
+	IsPVP         bool            `json:"isPVP"`
+	Props         []Prop          `json:"props"`
+	P1Effects     []*ActiveEffect `json:"p1Effects"`
+	P2Effects     []*ActiveEffect `json:"p2Effects"`
+	P1Name        string          `json:"p1Name"`
+	P2Name        string          `json:"p2Name"`
 }
 
 // GameConfig is a DTO for game settings sent to client on connect

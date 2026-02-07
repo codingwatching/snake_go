@@ -5,7 +5,7 @@ export class GameRenderer {
         this.cellSize = cellSize;
     }
 
-    render(gameState, boardWidth, boardHeight, explosions, confetti, floatingScores, currentMessage, messageStartTime, messageType = 'normal') {
+    render(gameState, boardWidth, boardHeight, explosions, confetti, floatingScores, currentMessage, messageStartTime, messageType = 'normal', clientUsername = null) {
         // Clear canvas
         this.ctx.fillStyle = '#1a1a2e';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -17,6 +17,8 @@ export class GameRenderer {
             this.ctx.fillText('Connecting to server...', this.canvas.width / 2, this.canvas.height / 2);
             return;
         }
+
+        // ... (Walls, Obstacles, Foods drawing unchanged) ...
 
         // Draw walls
         this.ctx.fillStyle = '#4a5568';
@@ -40,6 +42,11 @@ export class GameRenderer {
             this.ctx.shadowBlur = 0;
         }
 
+        // Draw props
+        if (gameState.props) {
+            this.drawProps(gameState.props);
+        }
+
         // Draw foods
         if (gameState.foods) {
             const isActive = gameState.started && !gameState.paused && !gameState.gameOver;
@@ -48,12 +55,15 @@ export class GameRenderer {
 
         // Draw player snake
         if (gameState.snake) {
+            const isLocal = clientUsername && gameState.p1Name === clientUsername;
             const isPlayerStunned = gameState.playerStunned;
             gameState.snake.forEach((segment, index) => {
                 if (index === 0) {
                     this.ctx.fillStyle = isPlayerStunned ? '#a0aec0' : '#48bb78';
                     this.drawCell(segment.x, segment.y);
                     this.drawEyes(segment.x, segment.y, false, isPlayerStunned);
+                    if (isLocal) this.drawYouIndicator(segment.x, segment.y, '#48bb78');
+                    this.drawActiveEffects(segment.x, segment.y, gameState.p1Effects || []);
                 } else {
                     this.ctx.fillStyle = isPlayerStunned ? '#cbd5e0' : '#68d391';
                     this.drawCell(segment.x, segment.y);
@@ -63,12 +73,15 @@ export class GameRenderer {
 
         // Draw AI snake
         if (gameState.aiSnake) {
+            const isLocal = clientUsername && gameState.p2Name === clientUsername;
             const isStunned = gameState.aiStunned;
             gameState.aiSnake.forEach((segment, index) => {
                 if (index === 0) {
                     this.ctx.fillStyle = isStunned ? '#718096' : '#9f7aea';
                     this.drawCell(segment.x, segment.y);
                     this.drawEyes(segment.x, segment.y, true, isStunned);
+                    if (isLocal) this.drawYouIndicator(segment.x, segment.y, '#9f7aea');
+                    this.drawActiveEffects(segment.x, segment.y, gameState.p2Effects || []);
                 } else {
                     this.ctx.fillStyle = isStunned ? '#a0aec0' : '#b794f4';
                     this.drawCell(segment.x, segment.y);
@@ -101,8 +114,87 @@ export class GameRenderer {
         this.drawCanvasMessage(currentMessage, messageStartTime, messageType);
     }
 
+    drawYouIndicator(x, y, color) {
+        const bounce = Math.sin(Date.now() * 0.01) * 3;
+        const centerX = x * this.cellSize + this.cellSize / 2;
+        const topY = y * this.cellSize - 15 + bounce;
+
+        this.ctx.save();
+        this.ctx.fillStyle = color;
+        this.ctx.font = 'bold 12px Inter, sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.shadowBlur = 10;
+        this.ctx.shadowColor = color;
+
+        // Background bubble
+        this.ctx.globalAlpha = 0.8;
+        this.ctx.fillText("YOU", centerX, topY);
+
+        // Triangle pointer
+        this.ctx.beginPath();
+        this.ctx.moveTo(centerX - 4, topY + 4);
+        this.ctx.lineTo(centerX + 4, topY + 4);
+        this.ctx.lineTo(centerX, topY + 10);
+        this.ctx.fill();
+        this.ctx.restore();
+    }
+
     drawCell(x, y) {
         this.ctx.fillRect(x * this.cellSize + 1, y * this.cellSize + 1, this.cellSize - 2, this.cellSize - 2);
+    }
+
+    drawProps(props) {
+        props.forEach(prop => {
+            if (!prop.pos) return;
+            const centerX = prop.pos.x * this.cellSize + this.cellSize / 2;
+            const centerY = prop.pos.y * this.cellSize + this.cellSize / 2;
+
+            // Pulsing glow
+            const pulse = Math.sin(Date.now() * 0.005) * 5 + 10;
+            this.ctx.save();
+            this.ctx.lineWidth = 2;
+            this.ctx.shadowBlur = pulse;
+
+            let emoji = "🎁";
+            if (prop.type === 0) { emoji = "🛡️"; this.ctx.shadowColor = "#4299e1"; }
+            else if (prop.type === 1) { emoji = "🌀"; this.ctx.shadowColor = "#9f7aea"; }
+            else if (prop.type === 2) { emoji = "✂️"; this.ctx.shadowColor = "#f56565"; }
+            else if (prop.type === 3) { emoji = "🧲"; this.ctx.shadowColor = "#48bb78"; }
+            else if (prop.type === 4) { emoji = "👑"; this.ctx.shadowColor = "#ecc94b"; } // Big Chest (Yellow/Gold)
+            else if (prop.type === 5) { emoji = "💰"; this.ctx.shadowColor = "#f6e05e"; } // Small Chest (Light Yellow)
+            else if (prop.type === 6) { emoji = "⚡"; this.ctx.shadowColor = "#ffeb3b"; } // Rapid Fire (Yellow)
+            else if (prop.type === 7) { emoji = "🌟"; this.ctx.shadowColor = "#e0aaff"; } // Scatter Shot (Light Purple)
+
+            this.ctx.font = `${this.cellSize * 0.8}px sans-serif`;
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(emoji, centerX, centerY);
+            this.ctx.restore();
+        });
+    }
+
+    drawActiveEffects(x, y, effects) {
+        if (!effects || effects.length === 0) return;
+
+        const centerX = x * this.cellSize + this.cellSize / 2;
+        const centerY = y * this.cellSize + this.cellSize / 2;
+
+        effects.forEach((eff, i) => {
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, this.cellSize * (0.6 + i * 0.2), 0, Math.PI * 2);
+            this.ctx.lineWidth = 2;
+            this.ctx.globalAlpha = 0.4 + Math.sin(Date.now() * 0.01 + i) * 0.2;
+
+            if (eff.type === "SHIELD") this.ctx.strokeStyle = "#4299e1";
+            else if (eff.type === "TIMEWARP") this.ctx.strokeStyle = "#9f7aea";
+            else if (eff.type === "MAGNET") this.ctx.strokeStyle = "#48bb78";
+            else if (eff.type === "RAPIDFIRE") this.ctx.strokeStyle = "#ffeb3b";
+            else if (eff.type === "SCATTER") this.ctx.strokeStyle = "#e0aaff";
+
+            this.ctx.stroke();
+            this.ctx.restore();
+        });
     }
 
     drawEyes(x, y, isAI, isStunned = false) {

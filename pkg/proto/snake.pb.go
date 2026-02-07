@@ -305,6 +305,110 @@ func (x *ScoreEvent) GetLabel() string {
 	return ""
 }
 
+type Prop struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pos           *Point                 `protobuf:"bytes,1,opt,name=pos,proto3" json:"pos,omitempty"`
+	Type          int32                  `protobuf:"varint,2,opt,name=type,proto3" json:"type,omitempty"` // PropType
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Prop) Reset() {
+	*x = Prop{}
+	mi := &file_pkg_proto_snake_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Prop) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Prop) ProtoMessage() {}
+
+func (x *Prop) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_proto_snake_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Prop.ProtoReflect.Descriptor instead.
+func (*Prop) Descriptor() ([]byte, []int) {
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Prop) GetPos() *Point {
+	if x != nil {
+		return x.Pos
+	}
+	return nil
+}
+
+func (x *Prop) GetType() int32 {
+	if x != nil {
+		return x.Type
+	}
+	return 0
+}
+
+type ActiveEffect struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"` // EffectType
+	Duration      float64                `protobuf:"fixed64,2,opt,name=duration,proto3" json:"duration,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActiveEffect) Reset() {
+	*x = ActiveEffect{}
+	mi := &file_pkg_proto_snake_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActiveEffect) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActiveEffect) ProtoMessage() {}
+
+func (x *ActiveEffect) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_proto_snake_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActiveEffect.ProtoReflect.Descriptor instead.
+func (*ActiveEffect) Descriptor() ([]byte, []int) {
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ActiveEffect) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *ActiveEffect) GetDuration() float64 {
+	if x != nil {
+		return x.Duration
+	}
+	return 0
+}
+
 type LeaderboardEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -318,7 +422,7 @@ type LeaderboardEntry struct {
 
 func (x *LeaderboardEntry) Reset() {
 	*x = LeaderboardEntry{}
-	mi := &file_pkg_proto_snake_proto_msgTypes[5]
+	mi := &file_pkg_proto_snake_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -330,7 +434,7 @@ func (x *LeaderboardEntry) String() string {
 func (*LeaderboardEntry) ProtoMessage() {}
 
 func (x *LeaderboardEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_snake_proto_msgTypes[5]
+	mi := &file_pkg_proto_snake_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -343,7 +447,7 @@ func (x *LeaderboardEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaderboardEntry.ProtoReflect.Descriptor instead.
 func (*LeaderboardEntry) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{5}
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *LeaderboardEntry) GetName() string {
@@ -393,7 +497,7 @@ type WinRateEntry struct {
 
 func (x *WinRateEntry) Reset() {
 	*x = WinRateEntry{}
-	mi := &file_pkg_proto_snake_proto_msgTypes[6]
+	mi := &file_pkg_proto_snake_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -405,7 +509,7 @@ func (x *WinRateEntry) String() string {
 func (*WinRateEntry) ProtoMessage() {}
 
 func (x *WinRateEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_snake_proto_msgTypes[6]
+	mi := &file_pkg_proto_snake_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -418,7 +522,7 @@ func (x *WinRateEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WinRateEntry.ProtoReflect.Descriptor instead.
 func (*WinRateEntry) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{6}
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WinRateEntry) GetName() string {
@@ -462,7 +566,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_pkg_proto_snake_proto_msgTypes[7]
+	mi := &file_pkg_proto_snake_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -474,7 +578,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_snake_proto_msgTypes[7]
+	mi := &file_pkg_proto_snake_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +591,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{7}
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *User) GetUsername() string {
@@ -556,13 +660,16 @@ type GameStateSnapshot struct {
 	IsPVP         bool                   `protobuf:"varint,27,opt,name=isPVP,proto3" json:"isPVP,omitempty"`
 	P1Name        string                 `protobuf:"bytes,28,opt,name=p1Name,proto3" json:"p1Name,omitempty"`
 	P2Name        string                 `protobuf:"bytes,29,opt,name=p2Name,proto3" json:"p2Name,omitempty"`
+	Props         []*Prop                `protobuf:"bytes,30,rep,name=props,proto3" json:"props,omitempty"`
+	P1Effects     []*ActiveEffect        `protobuf:"bytes,31,rep,name=p1Effects,proto3" json:"p1Effects,omitempty"`
+	P2Effects     []*ActiveEffect        `protobuf:"bytes,32,rep,name=p2Effects,proto3" json:"p2Effects,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GameStateSnapshot) Reset() {
 	*x = GameStateSnapshot{}
-	mi := &file_pkg_proto_snake_proto_msgTypes[8]
+	mi := &file_pkg_proto_snake_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -574,7 +681,7 @@ func (x *GameStateSnapshot) String() string {
 func (*GameStateSnapshot) ProtoMessage() {}
 
 func (x *GameStateSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_snake_proto_msgTypes[8]
+	mi := &file_pkg_proto_snake_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -587,7 +694,7 @@ func (x *GameStateSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameStateSnapshot.ProtoReflect.Descriptor instead.
 func (*GameStateSnapshot) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{8}
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GameStateSnapshot) GetSnake() []*Point {
@@ -793,6 +900,27 @@ func (x *GameStateSnapshot) GetP2Name() string {
 	return ""
 }
 
+func (x *GameStateSnapshot) GetProps() []*Prop {
+	if x != nil {
+		return x.Props
+	}
+	return nil
+}
+
+func (x *GameStateSnapshot) GetP1Effects() []*ActiveEffect {
+	if x != nil {
+		return x.P1Effects
+	}
+	return nil
+}
+
+func (x *GameStateSnapshot) GetP2Effects() []*ActiveEffect {
+	if x != nil {
+		return x.P2Effects
+	}
+	return nil
+}
+
 type GameConfig struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Width            int32                  `protobuf:"varint,1,opt,name=width,proto3" json:"width,omitempty"`
@@ -805,7 +933,7 @@ type GameConfig struct {
 
 func (x *GameConfig) Reset() {
 	*x = GameConfig{}
-	mi := &file_pkg_proto_snake_proto_msgTypes[9]
+	mi := &file_pkg_proto_snake_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -817,7 +945,7 @@ func (x *GameConfig) String() string {
 func (*GameConfig) ProtoMessage() {}
 
 func (x *GameConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_snake_proto_msgTypes[9]
+	mi := &file_pkg_proto_snake_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -830,7 +958,7 @@ func (x *GameConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameConfig.ProtoReflect.Descriptor instead.
 func (*GameConfig) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{9}
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GameConfig) GetWidth() int32 {
@@ -878,7 +1006,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_pkg_proto_snake_proto_msgTypes[10]
+	mi := &file_pkg_proto_snake_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -890,7 +1018,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_snake_proto_msgTypes[10]
+	mi := &file_pkg_proto_snake_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -903,7 +1031,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{10}
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ServerMessage) GetType() string {
@@ -983,7 +1111,7 @@ type ClientMessage struct {
 
 func (x *ClientMessage) Reset() {
 	*x = ClientMessage{}
-	mi := &file_pkg_proto_snake_proto_msgTypes[11]
+	mi := &file_pkg_proto_snake_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -995,7 +1123,7 @@ func (x *ClientMessage) String() string {
 func (*ClientMessage) ProtoMessage() {}
 
 func (x *ClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_proto_snake_proto_msgTypes[11]
+	mi := &file_pkg_proto_snake_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1008,7 +1136,7 @@ func (x *ClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMessage.ProtoReflect.Descriptor instead.
 func (*ClientMessage) Descriptor() ([]byte, []int) {
-	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{11}
+	return file_pkg_proto_snake_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ClientMessage) GetAction() string {
@@ -1076,7 +1204,13 @@ const file_pkg_proto_snake_proto_rawDesc = "" +
 	"ScoreEvent\x12\x1e\n" +
 	"\x03pos\x18\x01 \x01(\v2\f.snake.PointR\x03pos\x12\x16\n" +
 	"\x06amount\x18\x02 \x01(\x05R\x06amount\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05label\"\x84\x01\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\":\n" +
+	"\x04Prop\x12\x1e\n" +
+	"\x03pos\x18\x01 \x01(\v2\f.snake.PointR\x03pos\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\x05R\x04type\">\n" +
+	"\fActiveEffect\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
+	"\bduration\x18\x02 \x01(\x01R\bduration\"\x84\x01\n" +
 	"\x10LeaderboardEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05score\x18\x02 \x01(\x05R\x05score\x12\x12\n" +
@@ -1101,7 +1235,7 @@ const file_pkg_proto_snake_proto_rawDesc = "" +
 	"\n" +
 	"total_wins\x18\x04 \x01(\x05R\ttotalWins\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\tR\tcreatedAt\"\xbf\a\n" +
+	"created_at\x18\x05 \x01(\tR\tcreatedAt\"\xc8\b\n" +
 	"\x11GameStateSnapshot\x12\"\n" +
 	"\x05snake\x18\x01 \x03(\v2\f.snake.PointR\x05snake\x12%\n" +
 	"\x05foods\x18\x02 \x03(\v2\x0f.snake.FoodInfoR\x05foods\x12\x14\n" +
@@ -1136,7 +1270,10 @@ const file_pkg_proto_snake_proto_rawDesc = "" +
 	"\tberserker\x18\x1a \x01(\bR\tberserker\x12\x14\n" +
 	"\x05isPVP\x18\x1b \x01(\bR\x05isPVP\x12\x16\n" +
 	"\x06p1Name\x18\x1c \x01(\tR\x06p1Name\x12\x16\n" +
-	"\x06p2Name\x18\x1d \x01(\tR\x06p2Name\"\x8a\x01\n" +
+	"\x06p2Name\x18\x1d \x01(\tR\x06p2Name\x12!\n" +
+	"\x05props\x18\x1e \x03(\v2\v.snake.PropR\x05props\x121\n" +
+	"\tp1Effects\x18\x1f \x03(\v2\x13.snake.ActiveEffectR\tp1Effects\x121\n" +
+	"\tp2Effects\x18  \x03(\v2\x13.snake.ActiveEffectR\tp2Effects\"\x8a\x01\n" +
 	"\n" +
 	"GameConfig\x12\x14\n" +
 	"\x05width\x18\x01 \x01(\x05R\x05width\x12\x16\n" +
@@ -1173,20 +1310,22 @@ func file_pkg_proto_snake_proto_rawDescGZIP() []byte {
 	return file_pkg_proto_snake_proto_rawDescData
 }
 
-var file_pkg_proto_snake_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_pkg_proto_snake_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_pkg_proto_snake_proto_goTypes = []any{
 	(*Point)(nil),             // 0: snake.Point
 	(*FoodInfo)(nil),          // 1: snake.FoodInfo
 	(*Obstacle)(nil),          // 2: snake.Obstacle
 	(*Fireball)(nil),          // 3: snake.Fireball
 	(*ScoreEvent)(nil),        // 4: snake.ScoreEvent
-	(*LeaderboardEntry)(nil),  // 5: snake.LeaderboardEntry
-	(*WinRateEntry)(nil),      // 6: snake.WinRateEntry
-	(*User)(nil),              // 7: snake.User
-	(*GameStateSnapshot)(nil), // 8: snake.GameStateSnapshot
-	(*GameConfig)(nil),        // 9: snake.GameConfig
-	(*ServerMessage)(nil),     // 10: snake.ServerMessage
-	(*ClientMessage)(nil),     // 11: snake.ClientMessage
+	(*Prop)(nil),              // 5: snake.Prop
+	(*ActiveEffect)(nil),      // 6: snake.ActiveEffect
+	(*LeaderboardEntry)(nil),  // 7: snake.LeaderboardEntry
+	(*WinRateEntry)(nil),      // 8: snake.WinRateEntry
+	(*User)(nil),              // 9: snake.User
+	(*GameStateSnapshot)(nil), // 10: snake.GameStateSnapshot
+	(*GameConfig)(nil),        // 11: snake.GameConfig
+	(*ServerMessage)(nil),     // 12: snake.ServerMessage
+	(*ClientMessage)(nil),     // 13: snake.ClientMessage
 }
 var file_pkg_proto_snake_proto_depIdxs = []int32{
 	0,  // 0: snake.FoodInfo.pos:type_name -> snake.Point
@@ -1194,24 +1333,28 @@ var file_pkg_proto_snake_proto_depIdxs = []int32{
 	0,  // 2: snake.Fireball.pos:type_name -> snake.Point
 	0,  // 3: snake.Fireball.dir:type_name -> snake.Point
 	0,  // 4: snake.ScoreEvent.pos:type_name -> snake.Point
-	0,  // 5: snake.GameStateSnapshot.snake:type_name -> snake.Point
-	1,  // 6: snake.GameStateSnapshot.foods:type_name -> snake.FoodInfo
-	0,  // 7: snake.GameStateSnapshot.crashPoint:type_name -> snake.Point
-	2,  // 8: snake.GameStateSnapshot.obstacles:type_name -> snake.Obstacle
-	3,  // 9: snake.GameStateSnapshot.fireballs:type_name -> snake.Fireball
-	0,  // 10: snake.GameStateSnapshot.hitPoints:type_name -> snake.Point
-	0,  // 11: snake.GameStateSnapshot.aiSnake:type_name -> snake.Point
-	4,  // 12: snake.GameStateSnapshot.scoreEvents:type_name -> snake.ScoreEvent
-	9,  // 13: snake.ServerMessage.config:type_name -> snake.GameConfig
-	8,  // 14: snake.ServerMessage.state:type_name -> snake.GameStateSnapshot
-	5,  // 15: snake.ServerMessage.leaderboard:type_name -> snake.LeaderboardEntry
-	6,  // 16: snake.ServerMessage.win_rates:type_name -> snake.WinRateEntry
-	7,  // 17: snake.ServerMessage.user:type_name -> snake.User
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	0,  // 5: snake.Prop.pos:type_name -> snake.Point
+	0,  // 6: snake.GameStateSnapshot.snake:type_name -> snake.Point
+	1,  // 7: snake.GameStateSnapshot.foods:type_name -> snake.FoodInfo
+	0,  // 8: snake.GameStateSnapshot.crashPoint:type_name -> snake.Point
+	2,  // 9: snake.GameStateSnapshot.obstacles:type_name -> snake.Obstacle
+	3,  // 10: snake.GameStateSnapshot.fireballs:type_name -> snake.Fireball
+	0,  // 11: snake.GameStateSnapshot.hitPoints:type_name -> snake.Point
+	0,  // 12: snake.GameStateSnapshot.aiSnake:type_name -> snake.Point
+	4,  // 13: snake.GameStateSnapshot.scoreEvents:type_name -> snake.ScoreEvent
+	5,  // 14: snake.GameStateSnapshot.props:type_name -> snake.Prop
+	6,  // 15: snake.GameStateSnapshot.p1Effects:type_name -> snake.ActiveEffect
+	6,  // 16: snake.GameStateSnapshot.p2Effects:type_name -> snake.ActiveEffect
+	11, // 17: snake.ServerMessage.config:type_name -> snake.GameConfig
+	10, // 18: snake.ServerMessage.state:type_name -> snake.GameStateSnapshot
+	7,  // 19: snake.ServerMessage.leaderboard:type_name -> snake.LeaderboardEntry
+	8,  // 20: snake.ServerMessage.win_rates:type_name -> snake.WinRateEntry
+	9,  // 21: snake.ServerMessage.user:type_name -> snake.User
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_pkg_proto_snake_proto_init() }
@@ -1225,7 +1368,7 @@ func file_pkg_proto_snake_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_proto_snake_proto_rawDesc), len(file_pkg_proto_snake_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

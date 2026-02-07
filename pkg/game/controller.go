@@ -2,6 +2,8 @@ package game
 
 import (
 	"math/rand"
+
+	"github.com/trytobebee/snake_go/pkg/config"
 )
 
 // Controller defines the brain of a player (Human, AI, or Model)
@@ -42,7 +44,7 @@ func (c *HeuristicController) GetAction(g *Game, playerIdx int) ActionData {
 	}
 	p := g.Players[playerIdx]
 
-	newDir, boosting, _ := g.CalculateBestMove(p.Snake, p.LastMoveDir)
+	newDir, boosting, _ := g.CalculateBestMove(playerIdx, p.Snake, p.LastMoveDir)
 
 	// Intelligent Firing Module
 	fire := g.shouldAIFire(playerIdx, newDir)
@@ -97,7 +99,7 @@ func (c *NeuralController) GetAction(g *Game, playerIdx int) ActionData {
 
 	// Safety check - if NN suggests suicide, fallback
 	nextHead := Point{X: p.Snake[0].X + newDir.X, Y: p.Snake[0].Y + newDir.Y}
-	if !g.isSafe(nextHead) {
+	if !g.isSafe(nextHead, playerIdx) {
 		hc := &HeuristicController{}
 		return hc.GetAction(g, playerIdx)
 	}
@@ -108,9 +110,12 @@ func (c *NeuralController) GetAction(g *Game, playerIdx int) ActionData {
 		fire = g.shouldAIFire(playerIdx, newDir)
 	}
 
+	// Determine boosting using the shared heuristic logic
+	_, shouldBoost, _ := g.CalculateBestMove(playerIdx, p.Snake, p.Direction)
+
 	return ActionData{
 		Direction: newDir,
-		Boost:     false,
+		Boost:     shouldBoost,
 		Fire:      fire,
 	}
 }
@@ -130,8 +135,8 @@ func (g *Game) shouldAIFire(idx int, dir Point) bool {
 	for dist := 1; dist <= 8; dist++ {
 		look := Point{X: head.X + dir.X*dist, Y: head.Y + dir.Y*dist}
 
-		// If it's a wall, stop looking
-		if look.X <= 0 || look.X >= 24 || look.Y <= 0 || look.Y >= 24 {
+		// If it's a wall, stop looking (using config bounds)
+		if look.X <= 0 || look.X >= config.Width-1 || look.Y <= 0 || look.Y >= config.Height-1 {
 			break
 		}
 

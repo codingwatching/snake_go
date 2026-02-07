@@ -31,6 +31,16 @@ message ScoreEvent {
   string label = 3;
 }
 
+message Prop {
+  Point pos = 1;
+  int32 type = 2; // PropType
+}
+
+message ActiveEffect {
+  string type = 1; // EffectType
+  double duration = 2;
+}
+
 message LeaderboardEntry {
   string name = 1;
   int32 score = 2;
@@ -84,6 +94,9 @@ message GameStateSnapshot {
   bool isPVP = 27;
   string p1Name = 28;
   string p2Name = 29;
+  repeated Prop props = 30;
+  repeated ActiveEffect p1Effects = 31;
+  repeated ActiveEffect p2Effects = 32;
 }
 
 message GameConfig {

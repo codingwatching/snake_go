@@ -1,5 +1,5 @@
 import { SoundManager } from './modules/audio.js';
-import { GameRenderer } from './modules/renderer.js?v=2.3';
+import { GameRenderer } from './modules/renderer.js?v=2.4';
 
 export class SnakeGameClient {
     constructor() {
@@ -60,6 +60,8 @@ export class SnakeGameClient {
 
         // Matchmaking State
         this.isMatching = false;
+        this.shouldReconnect = true;
+        this.kickReason = null;
 
         // Start systems
         this.protoRoot = null;
@@ -118,6 +120,7 @@ export class SnakeGameClient {
         this.timerEl = document.querySelector('.timer');
         this.winRateEl = document.getElementById('winRate');
         this.gamesWonEl = document.getElementById('gamesWon');
+        this.effectsBar = document.getElementById('effectsBar');
         this.pingDisplay = document.getElementById('pingDisplay');
 
         // Leaderboard Elements
@@ -133,10 +136,19 @@ export class SnakeGameClient {
         this.btnRegister = document.getElementById('btnRegister');
         this.authMessage = document.getElementById('authMessage');
         this.cancelMatchBtn = document.getElementById('cancelMatchBtn');
+        this.reconnectBtn = document.getElementById('reconnectBtn');
 
         if (this.btnLogoutUser) this.btnLogoutUser.onclick = () => this.handleLogout();
         if (this.btnLogin) this.btnLogin.onclick = () => this.handleAuth('login');
         if (this.btnRegister) this.btnRegister.onclick = () => this.handleAuth('register');
+
+        if (this.reconnectBtn) {
+            this.reconnectBtn.onclick = () => {
+                this.shouldReconnect = true; // Reset flag if it was false
+                this.kickReason = null;      // Clear kick reason
+                this.setupWebSocket();
+            };
+        }
 
         // Feedback Elements
         this.feedbackTrigger = document.getElementById('feedback-trigger');
@@ -229,6 +241,9 @@ export class SnakeGameClient {
     handleLogout() {
         if (!confirm("Are you sure you want to logout?")) return;
 
+        // Notify server before cleaning up local state
+        this.sendMessage('logout');
+
         localStorage.removeItem('snake_auth');
         this.currentUser = null;
         this.authUsernameInput.value = '';
@@ -286,22 +301,25 @@ export class SnakeGameClient {
 
 
     startAnimationLoop() {
-        const frame = () => {
-            this.updateVisuals();
-            this.renderer.render(
-                this.gameState,
-                this.boardWidth,
-                this.boardHeight,
-                this.explosions,
-                this.confetti,
-                this.floatingScores,
-                this.currentMessage,
-                this.messageStartTime,
-                this.messageType
-            );
-            requestAnimationFrame(frame);
+        const loop = () => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.updateVisuals(); // Moved here from original updateUI call
+                this.renderer.render(
+                    this.gameState,
+                    this.boardWidth,
+                    this.boardHeight,
+                    this.explosions,
+                    this.confetti,
+                    this.floatingScores,
+                    this.currentMessage,
+                    this.messageStartTime,
+                    this.messageType,
+                    this.currentUser ? this.currentUser.username : null
+                );
+            }
+            requestAnimationFrame(loop);
         };
-        requestAnimationFrame(frame);
+        requestAnimationFrame(loop);
     }
 
     updateVisuals() {
@@ -332,12 +350,14 @@ export class SnakeGameClient {
     }
 
     setupWebSocket() {
+        this.updateConnectionStatus('connecting');
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         this.ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
         this.ws.binaryType = 'arraybuffer';
 
         this.ws.onopen = () => {
             this.updateConnectionStatus('connected');
+            this.updateOverlay();
 
             // Attempt auto-login if credentials exist
             const saved = localStorage.getItem('snake_auth');
@@ -373,16 +393,16 @@ export class SnakeGameClient {
                     this.currentUser = msg.user;
                     this.updateUserStatsUI();
                 }
-                if (msg.leaderboard) {
+                if (msg.leaderboard && msg.leaderboard.length > 0) {
                     console.log("🏆 Leaderboard update received via state message:", msg.leaderboard);
                     this.leaderboards.scores = msg.leaderboard;
-                    if (msg.win_rates) this.leaderboards.winRates = msg.win_rates;
+                    if (msg.winRates && msg.winRates.length > 0) this.leaderboards.winRates = msg.winRates;
                     this.renderLeaderboard();
                 }
                 this.updateUI();
             } else if (msg.type === 'leaderboard') {
                 this.leaderboards.scores = msg.leaderboard || [];
-                this.leaderboards.winRates = msg.win_rates || [];
+                this.leaderboards.winRates = msg.winRates || [];
                 this.renderLeaderboard();
             } else if (msg.type === 'auth_success') {
                 this.onAuthSuccess(msg);
@@ -393,7 +413,13 @@ export class SnakeGameClient {
             } else if (msg.type === 'pong') {
                 this.handlePong();
             } else if (msg.type === 'error') {
-                alert(msg.error || "A server error occurred.");
+                if (msg.error === 'Logged in from another location.') {
+                    this.shouldReconnect = false;
+                    this.kickReason = msg.error;
+                    this.updateOverlay();
+                } else {
+                    alert(msg.error || "A server error occurred.");
+                }
             }
         };
         this.ws.onerror = () => {
@@ -409,7 +435,7 @@ export class SnakeGameClient {
                 clearInterval(this.pingInterval);
                 this.pingInterval = null;
             }
-            setTimeout(() => this.setupWebSocket(), 3000);
+            // Automatic reconnection removed as per user request
         };
     }
 
@@ -467,15 +493,30 @@ export class SnakeGameClient {
         } else if (this.gameState.mode === 'pvp') {
             this.aiStatEl.style.display = 'flex';
             this.timerEl.style.display = 'flex';
-            this.aiStatEl.querySelector('.stat-label').textContent = this.gameState.p2Name || 'Player 2';
-            this.scoreEl.previousElementSibling.textContent = this.gameState.p1Name || 'Player 1';
+
+            const p1Label = this.gameState.p1Name || 'Player 1';
+            const p2Label = this.gameState.p2Name || 'Player 2';
+
+            this.scoreEl.previousElementSibling.textContent = p1Label;
+            this.aiStatEl.querySelector('.stat-label').textContent = p2Label;
             this.aiScoreEl.textContent = this.gameState.aiScore || 0;
+
+            // Highlight current player
+            const isP1 = this.currentUser && this.gameState.p1Name === this.currentUser.username;
+            const isP2 = this.currentUser && this.gameState.p2Name === this.currentUser.username;
+
+            this.scoreEl.parentElement.classList.toggle('current-player', !!isP1);
+            this.aiScoreEl.parentElement.classList.toggle('current-player', !!isP2);
         } else {
             this.aiStatEl.style.display = 'flex';
             this.timerEl.style.display = 'flex';
             this.aiStatEl.querySelector('.stat-label').textContent = 'AI Score';
             this.scoreEl.previousElementSibling.textContent = 'Score';
             this.aiScoreEl.textContent = this.gameState.aiScore || 0;
+
+            // In non-PVP, Player 1 is always the human
+            this.scoreEl.parentElement.classList.add('current-player');
+            this.aiScoreEl.parentElement.classList.remove('current-player');
         }
 
         this.processEvents();
@@ -507,11 +548,34 @@ export class SnakeGameClient {
             berserkerToggle.classList.toggle('active', !!this.gameState.berserker);
         }
 
-        // Update Auto-Play button state
-        const autoBtn = document.getElementById('btn-auto');
         if (autoBtn) {
             autoBtn.classList.toggle('active', !!this.gameState.autoPlay);
         }
+
+        this.updateEffectsUI();
+    }
+
+    updateEffectsUI() {
+        if (!this.effectsBar) return;
+
+        // Use P1 effects in solo, or my effects in PVP
+        const isP2 = this.currentUser && this.gameState.p2Name === this.currentUser.username;
+        const myEffects = isP2 ? (this.gameState.p2Effects || []) : (this.gameState.p1Effects || []);
+
+        if (myEffects.length === 0) {
+            this.effectsBar.innerHTML = '';
+            return;
+        }
+
+        const emojis = { "SHIELD": "🛡️", "TIMEWARP": "🌀", "MAGNET": "🧲", "RAPIDFIRE": "⚡", "SCATTER": "🌟" };
+
+        this.effectsBar.innerHTML = myEffects.map(eff => `
+            <div class="effect-badge ${eff.type.toLowerCase()}">
+                <span>${emojis[eff.type] || '🎁'}</span>
+                <span>${eff.type}</span>
+                <span style="opacity: 0.7; font-size: 0.8em">${eff.duration.toFixed(1)}s</span>
+            </div>
+        `).join('');
     }
 
     handleAuth(type) {
@@ -539,8 +603,8 @@ export class SnakeGameClient {
             this.showTempMessage(`Welcome, ${this.currentUser.username}!`);
 
             // Sync best score and stats from server
-            if (this.currentUser.best_score > this.bestScore) {
-                this.bestScore = this.currentUser.best_score;
+            if (this.currentUser.bestScore > this.bestScore) {
+                this.bestScore = this.currentUser.bestScore;
                 this.bestScoreEl.textContent = this.bestScore;
                 localStorage.setItem('snake_best_score', this.bestScore);
             }
@@ -573,8 +637,9 @@ export class SnakeGameClient {
 
     updateUserStatsUI() {
         if (!this.currentUser) return;
-        const total = this.currentUser.total_games || 0;
-        const wins = this.currentUser.total_wins || 0;
+        // Resilient check for both camelCase (decoded) and snake_case (proto source)
+        const total = (this.currentUser.totalGames !== undefined) ? this.currentUser.totalGames : (this.currentUser.total_games || 0);
+        const wins = (this.currentUser.totalWins !== undefined) ? this.currentUser.totalWins : (this.currentUser.total_wins || 0);
         const rate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
         if (this.winRateEl) this.winRateEl.textContent = `${rate}%`;
@@ -597,9 +662,30 @@ export class SnakeGameClient {
 
         // 1. Reset special elements
         this.cancelMatchBtn.classList.add('hidden');
+        this.reconnectBtn.classList.add('hidden');
         this.overlayTitle.classList.remove('searching-pulse', 'important-message');
 
-        if (this.isMatching) {
+        const isDisconnected = !this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING;
+        const isConnecting = this.ws && this.ws.readyState === WebSocket.CONNECTING;
+
+        if (this.kickReason) {
+            this.gameOverlay.style.display = 'flex';
+            this.overlayTitle.textContent = 'SESSION ENDED';
+            this.overlayTitle.style.color = '#f6e05e';
+            this.overlayMessage.textContent = this.kickReason;
+            this.reconnectBtn.classList.remove('hidden');
+        } else if (isDisconnected) {
+            this.gameOverlay.style.display = 'flex';
+            this.overlayTitle.textContent = 'CONNECTION LOST';
+            this.overlayTitle.style.color = '#f56565';
+            this.overlayMessage.textContent = 'Server is currently unavailable';
+            this.reconnectBtn.classList.remove('hidden');
+        } else if (isConnecting) {
+            this.gameOverlay.style.display = 'flex';
+            this.overlayTitle.textContent = 'CONNECTING...';
+            this.overlayTitle.style.color = '#fbbf24';
+            this.overlayMessage.textContent = 'Linking to game server';
+        } else if (this.isMatching) {
             this.gameOverlay.style.display = 'flex';
             this.overlayTitle.textContent = 'SEARCHING...';
             this.overlayTitle.classList.add('searching-pulse');
@@ -699,8 +785,8 @@ export class SnakeGameClient {
                     <div class="leaderboard-item ${isTop1}">
                         <span class="rank">#${index + 1}</span>
                         <span class="player-name">${this.escapeHTML(entry.name)}</span>
-                        <span class="player-score">${entry.win_rate.toFixed(1)}%</span>
-                        <span class="player-meta">${entry.total_wins} / ${entry.total_games} Wins</span>
+                        <span class="player-score">${(entry.winRate || 0).toFixed(1)}%</span>
+                        <span class="player-meta">${entry.totalWins || 0} / ${entry.totalGames || 0} Wins</span>
                     </div>
                 `;
             }).join('') || '<p class="loading-text">No data yet.</p>';

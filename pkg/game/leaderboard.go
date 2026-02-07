@@ -86,7 +86,7 @@ func (lm *LeaderboardManager) GetWinRateEntries() []WinRateEntry {
 		SELECT username, total_wins, total_games, 
 		       (CAST(total_wins AS FLOAT) / total_games * 100) as win_rate
 		FROM users 
-		WHERE total_games >= 1
+		WHERE total_games >= 3
 		ORDER BY win_rate DESC, total_games DESC
 		LIMIT ?`,
 		MaxLeaderboardEntries,
