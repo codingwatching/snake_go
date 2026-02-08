@@ -42,16 +42,16 @@ const (
 const (
 	BaseTick = 16 * time.Millisecond // Base tick interval (~60 FPS)
 	// Difficulty Settings (Number of BaseTicks per Move)
-	LowTicks  = 18
-	MidTicks  = 13
-	HighTicks = 9
+	LowTicks  = 22 // Decreased speed (was 18)
+	MidTicks  = 16 // Decreased speed (was 13)
+	HighTicks = 11 // Decreased speed (was 9)
 
 	// Boost settings: how many ticks during boost (usually ~1/3 of normal)
-	LowBoostTicks        = 6
-	MidBoostTicks        = 4
-	HighBoostTicks       = 3
-	NormalTicksPerUpdate = 18                     // Normal speed: 16ms * 18 = 288ms
-	BoostTicksPerUpdate  = 6                      // Boost: 16ms * 6 = 96ms
+	LowBoostTicks        = 8
+	MidBoostTicks        = 5
+	HighBoostTicks       = 4
+	NormalTicksPerUpdate = 22                     // Normal speed: 16ms * 22 = 352ms
+	BoostTicksPerUpdate  = 8                      // Boost: 16ms * 8 = 128ms
 	BoostTimeout         = 150 * time.Millisecond // Boost timeout duration
 	BoostThreshold       = 2                      // Consecutive key presses to trigger boost
 	KeyRepeatWindow      = 200 * time.Millisecond // Time window for consecutive key detection
