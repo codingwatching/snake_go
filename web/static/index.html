@@ -3,12 +3,21 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>🐍 Snake Game - Web Version</title>
-    <link rel="stylesheet" href="style.css?v=5.1">
+    <link rel="stylesheet" href="style.css?v=5.3">
 </head>
 
 <body>
+    <!-- Orientation Gate: shown only on touch devices held in portrait -->
+    <div class="orientation-lock" id="orientationLock">
+        <div class="orientation-lock-content">
+            <div class="orientation-icon">📱</div>
+            <h2>请横屏游玩</h2>
+            <p>Please rotate your device to landscape</p>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Header -->
         <header class="game-header">
@@ -120,6 +129,22 @@
                     <button class="mobile-btn" id="btn-down">▼</button>
                 </div>
             </div>
+
+            <!-- Immersive landscape HUD (mobile) -->
+            <div class="immersive-topbar" id="immersiveTopbar">
+                <span class="imm-stat">🏆 <b id="immScore">0</b></span>
+                <span class="imm-stat">⏱ <b id="immTime">--</b></span>
+            </div>
+            <div class="mobile-hud" id="mobileHud">
+                <div class="joystick" id="joystick">
+                    <div class="joystick-thumb" id="joystickThumb"></div>
+                </div>
+                <div class="hud-actions">
+                    <button class="hud-btn fire" id="hud-fire">🔥</button>
+                    <button class="hud-btn pause" id="hud-pause">⏸</button>
+                </div>
+            </div>
+            <button class="fullscreen-btn" id="fullscreenBtn" aria-label="Fullscreen">⛶</button>
         </div>
 
         <!-- Leaderboard Panel -->
@@ -243,7 +268,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.4/dist/protobuf.min.js"></script>
-    <script type="module" src="game.js?v=2.5"></script>
+    <script type="module" src="game.js?v=2.7"></script>
 
 </body>
 

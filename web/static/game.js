@@ -76,6 +76,8 @@ export class SnakeGameClient {
             this.setupDifficulty();
             this.setupAutoPlay();
             this.setupMode();
+            this.setupOrientationGate();
+            this.setupMobileHud();
         }).catch(err => {
             console.error("❌ Failed to load Protobuf:", err);
             this.updateConnectionStatus('error');
@@ -496,6 +498,10 @@ export class SnakeGameClient {
         const timeRemaining = this.gameState.timeRemaining ?? this.gameDuration;
         this.timeLeftEl.textContent = timeRemaining;
         this.timeLeftEl.parentElement.classList.toggle('low-time', timeRemaining <= 10);
+
+        // Minimal immersive-landscape HUD.
+        if (this.immScoreEl) this.immScoreEl.textContent = currentScore;
+        if (this.immTimeEl) this.immTimeEl.textContent = this.gameState.mode === 'zen' ? '∞' : timeRemaining;
 
         if (this.gameState.mode === 'zen') {
             this.aiStatEl.style.display = 'none';
@@ -952,6 +958,148 @@ export class SnakeGameClient {
         });
     }
 
+    setupOrientationGate() {
+        // The CSS overlay (#orientationLock) already blocks portrait visually on
+        // touch devices. Here we (1) try to lock to landscape where the browser
+        // supports it (Android Chrome in fullscreen — iOS Safari does not), and
+        // (2) auto-pause a running game when the player turns to portrait, so the
+        // snake doesn't keep moving (and die) behind the overlay.
+        const isTouch = window.matchMedia('(pointer: coarse)').matches;
+        if (!isTouch) return; // desktop: nothing to gate
+
+        const isPortrait = () => window.matchMedia('(orientation: portrait)').matches;
+
+        const handle = () => {
+            if (isPortrait()) {
+                const g = this.gameState;
+                if (g && g.started && !g.paused && !g.gameOver && !this._orientationPaused) {
+                    this.sendMessage('pause');
+                    this._orientationPaused = true; // guard against double-send before server confirms
+                }
+            } else {
+                this._orientationPaused = false;
+                // Best-effort hard lock (no-op / throws on unsupported browsers).
+                try { screen.orientation?.lock?.('landscape')?.catch?.(() => {}); } catch (e) { /* ignore */ }
+            }
+        };
+
+        window.addEventListener('orientationchange', handle);
+        window.addEventListener('resize', handle);
+        handle();
+    }
+
+    // setupMobileHud wires the immersive landscape controls: a virtual joystick
+    // for movement, fire/pause buttons, and a fullscreen toggle.
+    setupMobileHud() {
+        // Cache the minimal score/time HUD (updated in updateUI).
+        this.immScoreEl = document.getElementById('immScore');
+        this.immTimeEl = document.getElementById('immTime');
+
+        this.setupJoystick();
+
+        document.getElementById('hud-fire')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.fire();
+        });
+        document.getElementById('hud-pause')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.sendMessage('pause');
+        });
+        document.getElementById('fullscreenBtn')?.addEventListener('click', () => this.toggleFullscreen());
+    }
+
+    setupJoystick() {
+        const base = document.getElementById('joystick');
+        const thumb = document.getElementById('joystickThumb');
+        if (!base || !thumb) return;
+
+        const RADIUS = 45;   // max thumb travel (px)
+        const DEADZONE = 12; // ignore tiny nudges near the centre
+
+        let active = false;
+        let curDir = null;
+        let repeatTimer = null;
+
+        const dominantDir = (dx, dy) => {
+            if (Math.hypot(dx, dy) < DEADZONE) return null;
+            if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'right' : 'left';
+            return dy > 0 ? 'down' : 'up';
+        };
+
+        const moveThumb = (dx, dy) => {
+            const dist = Math.min(Math.hypot(dx, dy), RADIUS);
+            const ang = Math.atan2(dy, dx);
+            thumb.style.transform = `translate(${Math.cos(ang) * dist}px, ${Math.sin(ang) * dist}px)`;
+        };
+
+        const aim = (clientX, clientY) => {
+            const rect = base.getBoundingClientRect();
+            const dx = clientX - (rect.left + rect.width / 2);
+            const dy = clientY - (rect.top + rect.height / 2);
+            moveThumb(dx, dy);
+            const dir = dominantDir(dx, dy);
+            // Send immediately when the direction changes; the repeat timer below
+            // keeps re-sending the held direction so the server's "hold to BOOST"
+            // logic still works (same as the old d-pad).
+            if (dir && dir !== curDir) {
+                curDir = dir;
+                this.sendMessage(dir);
+                this.sounds.playMove();
+                this.triggerHaptic(15);
+            }
+        };
+
+        const start = (e) => {
+            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+            e.preventDefault();
+            active = true;
+            const t = e.touches ? e.touches[0] : e;
+            aim(t.clientX, t.clientY);
+            if (repeatTimer) clearInterval(repeatTimer);
+            repeatTimer = setInterval(() => { if (curDir) this.sendMessage(curDir); }, 80);
+        };
+        const move = (e) => {
+            if (!active) return;
+            e.preventDefault();
+            const t = e.touches ? e.touches[0] : e;
+            aim(t.clientX, t.clientY);
+        };
+        const end = () => {
+            active = false;
+            curDir = null;
+            thumb.style.transform = 'translate(0, 0)';
+            if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+        };
+
+        base.addEventListener('touchstart', start, { passive: false });
+        base.addEventListener('touchmove', move, { passive: false });
+        base.addEventListener('touchend', end);
+        base.addEventListener('touchcancel', end);
+    }
+
+    toggleFullscreen() {
+        const doc = document;
+        const el = doc.documentElement;
+        const isFs = doc.fullscreenElement || doc.webkitFullscreenElement;
+        if (!isFs) {
+            (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+            try { screen.orientation?.lock?.('landscape')?.catch?.(() => {}); } catch (e) { /* ignore */ }
+        } else {
+            (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc);
+        }
+    }
+
+    // tryEnterFullscreen is a best-effort call meant to run inside a user gesture
+    // (e.g. tapping to start). No-op on browsers that don't support it (iOS Safari).
+    tryEnterFullscreen() {
+        if (!window.matchMedia('(pointer: coarse)').matches) return;
+        const doc = document;
+        if (doc.fullscreenElement || doc.webkitFullscreenElement) return;
+        const el = doc.documentElement;
+        try { (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el); } catch (e) { /* ignore */ }
+        try { screen.orientation?.lock?.('landscape')?.catch?.(() => {}); } catch (e) { /* ignore */ }
+    }
+
     setupMobileControls() {
         const buttons = { 'btn-up': 'up', 'btn-down': 'down', 'btn-left': 'left', 'btn-right': 'right', 'btn-pause': 'pause' };
         this.pressTimer = null;
@@ -979,6 +1127,8 @@ export class SnakeGameClient {
         const handleStartRestart = () => {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
             if (this.isMatching) return; // Prevent clicking while matching
+            // This tap is a user gesture — a good moment to go fullscreen on mobile.
+            this.tryEnterFullscreen();
             if (this.gameState?.gameOver) this.sendMessage('restart');
             else if (this.gameState && !this.gameState.started) this.sendMessage('start');
         };

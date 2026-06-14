@@ -926,6 +926,206 @@ kbd {
 }
 
 /* Responsive */
+/* ===== Orientation Gate ===== */
+/* Hidden by default (desktop / landscape). Shown only on touch devices held
+   in portrait, covering the whole screen so the game is landscape-only. */
+.orientation-lock {
+    display: none;
+}
+
+@media (orientation: portrait) and (pointer: coarse) {
+    .orientation-lock {
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 99999;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background: radial-gradient(circle at center, #1a1a2e 0%, #0d0d1a 100%);
+        color: #fff;
+        padding: 24px;
+    }
+
+    .orientation-lock-content h2 {
+        margin: 16px 0 8px;
+        font-size: 1.6rem;
+    }
+
+    .orientation-lock-content p {
+        opacity: 0.7;
+        font-size: 0.95rem;
+    }
+
+    .orientation-icon {
+        font-size: 4.5rem;
+        display: inline-block;
+        animation: rotate-hint 1.8s ease-in-out infinite;
+    }
+
+    /* Prevent the page behind from scrolling/peeking while the gate is up. */
+    body {
+        overflow: hidden;
+    }
+}
+
+@keyframes rotate-hint {
+    0%, 40% { transform: rotate(0deg); }
+    60%, 100% { transform: rotate(-90deg); }
+}
+
+/* ===== Immersive Mobile Landscape UI ===== */
+/* New HUD elements are hidden everywhere by default and only appear on touch
+   devices held in landscape (the immersive media query below). */
+.immersive-topbar,
+.mobile-hud,
+.fullscreen-btn {
+    display: none;
+}
+
+@media (orientation: landscape) and (pointer: coarse) {
+    body {
+        padding: 0 !important;
+        overflow: hidden;
+    }
+
+    .container {
+        padding: 0 !important;
+        max-width: 100% !important;
+    }
+
+    /* Hide the desktop chrome; keep only the canvas, overlays and the new HUD. */
+    .game-header,
+    .stats-panel,
+    .active-effects-bar,
+    .mode-panel,
+    .difficulty-panel,
+    .leaderboard-panel,
+    .controls-panel,
+    .legend,
+    .connection-status,
+    .feedback-trigger,
+    .mobile-controls {
+        display: none !important;
+    }
+
+    /* Canvas fills the screen, scaled to fit the (height-constrained) landscape. */
+    .game-container {
+        position: fixed;
+        inset: 0;
+        margin: 0 !important;
+        padding: 0 !important;
+        border-radius: 0;
+        background: #0d0d1a;
+        box-shadow: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #gameCanvas {
+        max-width: 100vw;
+        max-height: 100vh;
+        max-height: 100dvh;
+        width: auto;
+        height: auto;
+        margin: 0;
+        border-radius: 0;
+    }
+
+    /* Minimal score / time strip. */
+    .immersive-topbar {
+        display: flex;
+        position: fixed;
+        top: env(safe-area-inset-top, 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        gap: 18px;
+        padding: 4px 16px;
+        background: rgba(0, 0, 0, 0.45);
+        border-radius: 0 0 12px 12px;
+        color: #fff;
+        font-size: 0.95rem;
+        z-index: 50;
+        pointer-events: none;
+    }
+
+    /* Virtual joystick (left thumb). */
+    .mobile-hud { display: block; }
+
+    .joystick {
+        position: fixed;
+        left: max(20px, env(safe-area-inset-left));
+        bottom: 24px;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.08);
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        touch-action: none;
+        z-index: 60;
+    }
+
+    .joystick-thumb {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 54px;
+        height: 54px;
+        margin: -27px 0 0 -27px;
+        border-radius: 50%;
+        background: rgba(108, 99, 255, 0.85);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+        transition: transform 0.05s linear;
+    }
+
+    /* Action buttons (right thumb). */
+    .hud-actions {
+        position: fixed;
+        right: max(20px, env(safe-area-inset-right));
+        bottom: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        z-index: 60;
+    }
+
+    .hud-btn {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        border: none;
+        color: #fff;
+        font-size: 1.8rem;
+        background: rgba(255, 255, 255, 0.12);
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+    }
+
+    .hud-btn.fire { background: rgba(255, 77, 77, 0.85); }
+    .hud-btn.pause { background: rgba(255, 255, 255, 0.18); font-size: 1.4rem; }
+    .hud-btn:active { transform: scale(0.92); }
+
+    /* Fullscreen toggle (top-right corner). */
+    .fullscreen-btn {
+        display: block;
+        position: fixed;
+        top: env(safe-area-inset-top, 8px);
+        right: max(12px, env(safe-area-inset-right));
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        border: none;
+        background: rgba(0, 0, 0, 0.4);
+        color: #fff;
+        font-size: 1.1rem;
+        z-index: 60;
+    }
+}
+
 @media (max-width: 768px) {
     body {
         padding: 10px;
