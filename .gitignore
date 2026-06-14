@@ -49,6 +49,8 @@ __pycache__/
 ml/checkpoints/
 data/
 .env
+venv/
+.venv/
 
 # tar.gz
 *.tar.gz

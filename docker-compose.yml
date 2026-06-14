@@ -10,6 +10,8 @@ services:
     restart: always
     environment:
       - DETAILED_LOGS=true
+      # Keep the container listening on 8080 so the port mapping / reverse proxy is unaffected.
+      - PORT=8080
     env_file:
       - .env
     command: [ "./webserver", "--detailed-logs" ]

@@ -25,7 +25,7 @@ COPY . .
 
 # Build the application
 # We use CGO_ENABLED=1 because onnxruntime_go requires it for dynamic library interaction
-RUN CGO_ENABLED=1 GOOS=linux go build -v -o webserver ./cmd/webserver/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -v -o webserver ./cmd/webserver
 
 # Runtime Stage
 FROM debian:bookworm-slim
