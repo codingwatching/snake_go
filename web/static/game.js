@@ -977,7 +977,15 @@ export class SnakeGameClient {
                     this._orientationPaused = true; // guard against double-send before server confirms
                 }
             } else {
-                this._orientationPaused = false;
+                // Back to landscape: if WE auto-paused on portrait, resume by
+                // toggling 'pause' again (the server treats it as a switch).
+                // Without this the game stays frozen after any portrait->landscape
+                // flip — including the transient portrait reported while the device
+                // settles into fullscreen / orientation-lock at game start.
+                if (this._orientationPaused) {
+                    this.sendMessage('pause');
+                    this._orientationPaused = false;
+                }
                 // Best-effort hard lock (no-op / throws on unsupported browsers).
                 try { screen.orientation?.lock?.('landscape')?.catch?.(() => {}); } catch (e) { /* ignore */ }
             }
